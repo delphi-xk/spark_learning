@@ -45,7 +45,7 @@ public class SparkJavaTest {
                     s.col("avg_price").as("avg_price_"+index));
 
         }
-        ids.saveAsTable("hyzs.his_result");
+        ids.write().saveAsTable("hyzs.his_result");
 
         //dataFrame.saveAsTable("his_test_swp");
 

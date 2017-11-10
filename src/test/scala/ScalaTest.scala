@@ -287,6 +287,17 @@ object ScalaTest {
     println(li.mkString("|"))
   }
 
+  val endDate = PropertyUtils.dynamic("start_date")
+  val slotSecs = 86400*30L
+  val stampFunc: (String => String) = (oldDate: String) => {
+    val format = new SimpleDateFormat("yyyyMMdd")
+    val oldDateUnix = format.parse(oldDate).getTime / 1000L
+    val endDateUnix = format.parse(endDate).getTime / 1000L
+    val stamp = Math.floor((endDateUnix - oldDateUnix)/slotSecs)
+    stamp.toInt.toString
+  }
+
+
   def main(args: Array[String]) {
     //test5()
     //for (i <- 0 to 20)println(s"fib($i): "+fibonacci(i))
@@ -296,7 +307,9 @@ object ScalaTest {
     //test8()
     //test3()
     //testZip()
-    testList()
+    //testList()
+    println(stampFunc("20180301"))
+
   }
 
 }

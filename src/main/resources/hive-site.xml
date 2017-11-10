@@ -1,4 +1,5 @@
 <configuration>
+    <!--
     <property>
         <name>javax.jdo.option.ConnectionURL</name>
         <value>jdbc:mysql://master:3306/hive?createDatabaseIfNotExist=true</value>
@@ -15,12 +16,12 @@
         <name>javax.jdo.option.ConnectionPassword</name>
         <value>hive</value>
     </property>
+ -->
 
 
-    <!--
     <property>
       <name>hive.metastore.uris</name>
       <value>thrift://master:9083</value>
     </property>
-    -->
+
 </configuration>

@@ -159,28 +159,48 @@ object BusinessTest {
 
 
 
-  def processTypeTable() : Unit = {
 
+
+
+
+
+
+  def processTypeTable() : Unit = {
+    val dateFiled = "create_date"
     val srcTable = "event_type_data"
     val srcDb = PropertyUtils.db("source_database")
     val dstDb = PropertyUtils.db("default_database")
+    val endDate = PropertyUtils.dynamic("start_date")
+    val slotSecs = 86400*30L
+
     sqlContext.sql(s"drop table $dstDb.${srcTable}_new")
-    var df = sqlContext.sql(s"select * from $srcDb.$srcTable")
+    var df = sqlContext.sql(s"select * from $srcDb.$srcTable where $dateFiled <= $endDate")
+    val countFields = Seq("price")
 
     val transMap = returnTransMap()
-    val transFuc: (String => String) = (key: String) => {
+    val transFunc: (String => String) = (key: String) => {
       if(transMap.contains(key))
         transMap(key)
       else
         "others"
     }
-    val udfFunc = udf(transFuc)
-    df = df.withColumn("t_types", udfFunc($"trans_type"))
-    df.groupBy($"client_no",$"t_types")
+
+    val stampFunc: (String => Int) = (oldDate: String) => {
+      val format = new SimpleDateFormat("yyyyMMdd")
+      val oldDateUnix = format.parse(oldDate).getTime / 1000L
+      val endDateUnix = format.parse(endDate).getTime / 1000L
+      val stamp = Math.floor((endDateUnix - oldDateUnix)/slotSecs)
+      stamp.toInt
+    }
+
+    val transUdf = udf(transFunc)
+    val stampUdf = udf(stampFunc)
+    df = df.withColumn("t_types", transUdf($"trans_type")).withColumn("stamp", stampUdf(col(dateFiled)))
+
+    //df.groupBy($"client_no",$"t_types")
 
     df.write.mode(SaveMode.Overwrite).saveAsTable(s"$dstDb.${srcTable}_new")
   }
-
 
   def getHisStartDate(endDate:String, slotNum:Int, slotSec:Long) : String = {
     val format = new SimpleDateFormat("yyyyMMdd")
