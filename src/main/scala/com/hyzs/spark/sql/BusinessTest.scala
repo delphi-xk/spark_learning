@@ -157,14 +157,6 @@ object BusinessTest {
   //def genAgg(f: Column => Column)(x: String) = f(col(x)).alias(x)
   def genAgg(func: Column => Column)(field: String, index: String) = func(col(field)).alias(s"${func}_${field}_${index}")
 
-
-
-
-
-
-
-
-
   def processTypeTable() : Unit = {
     val dateFiled = "create_date"
     val srcTable = "event_type_data"
@@ -193,11 +185,18 @@ object BusinessTest {
       stamp.toInt
     }
 
+    val stampRange = 0 to 5
+    val typeRange = PropertyUtils.dynamic.keySet()
+
     val transUdf = udf(transFunc)
     val stampUdf = udf(stampFunc)
     df = df.withColumn("t_types", transUdf($"trans_type")).withColumn("stamp", stampUdf(col(dateFiled)))
 
-    //df.groupBy($"client_no",$"t_types")
+    df.groupBy($"client_no",$"t_types", $"stamp")
+      .agg(sum("price").alias("sum_price"))
+      .filter(s"stamp <= 5")
+      //.select($"client_no" :: typeRange.map(genCase): _*)
+
 
     df.write.mode(SaveMode.Overwrite).saveAsTable(s"$dstDb.${srcTable}_new")
   }

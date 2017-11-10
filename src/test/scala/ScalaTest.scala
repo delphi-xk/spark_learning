@@ -287,6 +287,11 @@ object ScalaTest {
     println(li.mkString("|"))
   }
 
+  def testSet(): Unit = {
+    val keys = PropertyUtils.dynamic.keySet()
+    // keys.forEach(println(_))
+  }
+
   val endDate = PropertyUtils.dynamic("start_date")
   val slotSecs = 86400*30L
   val stampFunc: (String => String) = (oldDate: String) => {
