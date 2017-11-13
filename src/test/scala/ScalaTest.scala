@@ -288,8 +288,9 @@ object ScalaTest {
   }
 
   def testSet(): Unit = {
-    val keys = PropertyUtils.dynamic.keySet()
-    // keys.forEach(println(_))
+
+    val keys = PropertyUtils.transType.keySet().toArray(Array[String]("")).sortBy(x => x.drop(2).toInt)
+    keys.foreach(println)
   }
 
   val endDate = PropertyUtils.dynamic("start_date")
@@ -313,8 +314,8 @@ object ScalaTest {
     //test3()
     //testZip()
     //testList()
-    println(stampFunc("20180301"))
-
+    //println(stampFunc("20180301"))
+    testSet
   }
 
 }

@@ -165,6 +165,11 @@ object BusinessTest {
     val endDate = PropertyUtils.dynamic("start_date")
     val slotSecs = 86400*30L
 
+   /* val genCase = (x : String) => {
+      when($"t_types" <=> lit(x), $"sum_price").otherwise(0).alias("sum_price_"+x)
+    }*/
+
+
     sqlContext.sql(s"drop table $dstDb.${srcTable}_new")
     var df = sqlContext.sql(s"select * from $srcDb.$srcTable where $dateFiled <= $endDate")
     val countFields = Seq("price")
@@ -186,19 +191,27 @@ object BusinessTest {
     }
 
     val stampRange = 0 to 5
-    val typeRange = PropertyUtils.dynamic.keySet()
+    val typeRange = PropertyUtils.transType
+      .keySet()
+      .toArray(new Array[String](0))
+      .sortBy(x => x.drop(2).toInt)
+
 
     val transUdf = udf(transFunc)
     val stampUdf = udf(stampFunc)
-    df = df.withColumn("t_types", transUdf($"trans_type")).withColumn("stamp", stampUdf(col(dateFiled)))
+    df = df
+      .withColumn("t_types", transUdf($"trans_type"))
+     // .withColumn("stamp", stampUdf(col(dateFiled)))
 
-    df.groupBy($"client_no",$"t_types", $"stamp")
+    val result = df
+      //.filter(s"stamp <= 5")
+      .groupBy($"client_no",$"t_types")
+      //.groupBy($"client_no",$"t_types", $"stamp")
       .agg(sum("price").alias("sum_price"))
-      .filter(s"stamp <= 5")
-      //.select($"client_no" :: typeRange.map(genCase): _*)
+      .select($"client_no" +: typeRange.map(genCase): _*)
 
 
-    df.write.mode(SaveMode.Overwrite).saveAsTable(s"$dstDb.${srcTable}_new")
+    result.write.mode(SaveMode.Overwrite).saveAsTable(s"$dstDb.${srcTable}_new")
   }
 
   def getHisStartDate(endDate:String, slotNum:Int, slotSec:Long) : String = {
