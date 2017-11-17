@@ -2,7 +2,7 @@
 ```
 spark-submit --class com.hyzs.spark.sql.MergeTable \
  --master yarn-cluster \
- --num-executors 2 \
+ --num-executors 3 \
  --executor-cores 2 \
  --executor-memory 3G \
  --jars lib/datanucleus-api-jdo-3.2.6.jar,lib/datanucleus-core-3.2.10.jar,lib/datanucleus-rdbms-3.2.9.jar  \

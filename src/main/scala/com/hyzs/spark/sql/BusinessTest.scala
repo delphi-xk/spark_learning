@@ -27,11 +27,11 @@ object BusinessTest {
 
 
   def main(args: Array[String]): Unit =  {
-    //sqlContext.setConf("spark.sql.shuffle.partitions", "12")
+    sqlContext.setConf("spark.sql.shuffle.partitions", "53")
     //sqlContext.sql("set spark.sql.shuffle.partitions = 10")
     //generateSummary2()
     //testSave()
-    processTypeTable()
+    processTypeTable(args(0))
 
   }
 
@@ -150,29 +150,49 @@ object BusinessTest {
 
   }
 
-  def genCase(x: String) = {
+/*  def genCase(x: String) = {
     when($"t_types" <=> lit(x), $"sum_price").otherwise(0).alias("sum_price_"+x)
+  }*/
+
+
+
+/*  def genCase(t_type: String, filed: String) = {
+    when($"t_types" <=> lit(t_type), col(s"sum_$filed"))
+      .otherwise(0)
+      .as(s"sum_${filed}_$t_type")
+    when($"t_types" <=> lit(t_type), col(s"avg_$filed"))
+      .otherwise(0)
+      .as(s"avg_${filed}_$t_type")
+  }*/
+
+  def genCase(t_type: String) = {
+    when($"t_types" <=> lit(t_type), col(s"sum_price"))
+      .otherwise(0)
+      .as(s"sum_price_$t_type")
+    when($"t_types" <=> lit(t_type), col(s"avg_price"))
+      .otherwise(0)
+      .as(s"avg_price_$t_type")
   }
 
-  //def genAgg(f: Column => Column)(x: String) = f(col(x)).alias(x)
-  def genAgg(func: Column => Column)(field: String, index: String) = func(col(field)).alias(s"${func}_${field}_${index}")
 
-  def processTypeTable() : Unit = {
+  //def genAgg(f: Column => Column)(x: String) = f(col(x)).alias(x)
+  def genAgg(func: Column => Column)(field: String): Column = {
+    func(col(field)).alias(s"${func}_${field}")
+  }
+
+  // rebuild summary table: client_no, fun1_col1_index1_index2, ...
+  def processTypeTable(stampLength: String) : Unit = {
     val dateFiled = "create_date"
     val srcTable = "event_type_data"
+    val countFields = Seq("price")
+    val key = "client_no"
     val srcDb = PropertyUtils.db("source_database")
     val dstDb = PropertyUtils.db("default_database")
     val endDate = PropertyUtils.dynamic("start_date")
     val slotSecs = 86400*30L
 
-   /* val genCase = (x : String) => {
-      when($"t_types" <=> lit(x), $"sum_price").otherwise(0).alias("sum_price_"+x)
-    }*/
-
-
     sqlContext.sql(s"drop table $dstDb.${srcTable}_new")
-    var df = sqlContext.sql(s"select * from $srcDb.$srcTable where $dateFiled <= $endDate")
-    val countFields = Seq("price")
+    val df = sqlContext.sql(s"select * from $srcDb.$srcTable where $dateFiled <= $endDate")
 
     val transMap = returnTransMap()
     val transFunc: (String => String) = (key: String) => {
@@ -190,26 +210,50 @@ object BusinessTest {
       stamp.toInt
     }
 
-    val stampRange = 0 to 5
+    val stampRange = 0 until stampLength.toInt
     val typeRange = PropertyUtils.transType
       .keySet()
       .toArray(new Array[String](0))
       .sortBy(x => x.drop(2).toInt)
 
-
     val transUdf = udf(transFunc)
     val stampUdf = udf(stampFunc)
-    df = df
+
+    val aggCols = countFields.flatMap(name => List(sum(name).as("sum_"+name), avg(name).as("avg_"+name)))
+
+/*    df = df
+      .groupBy(col(key),$"t_types")
+      .agg(count(col(key)).as("count_"+key), aggCols : _*)
+      .select($"client_no" +: typeRange.map(genCase): _*)*/
+
+    val swp = df
       .withColumn("t_types", transUdf($"trans_type"))
-     // .withColumn("stamp", stampUdf(col(dateFiled)))
+      .withColumn("stamp", stampUdf(col(dateFiled)))
+      .filter(s"stamp <= 5")
+      .groupBy(col(key),$"t_types", $"stamp")
+      .agg(count(col(key)).as("count_"+key), aggCols : _*)
+    swp.cache()
+    println("swp cols: "+swp.columns.mkString(","))
 
-    val result = df
-      //.filter(s"stamp <= 5")
-      .groupBy($"client_no",$"t_types")
-      //.groupBy($"client_no",$"t_types", $"stamp")
-      .agg(sum("price").alias("sum_price"))
-      .select($"client_no" +: typeRange.map(genCase): _*)
+    // drop cols client_no, t_types, stamp
+    // build table(small) join probe table(big)
+    val cols = swp.columns.drop(3)
 
+    val ids = swp.select(key).distinct().orderBy(key)
+    var result = ids
+    for(s <- stampRange){
+      var s_tmp = ids
+      for (t <- typeRange){
+        val t_tmp = swp.filter($"stamp" === s && $"t_types" === t)
+          .select(col(key) +: cols.map(name => col(name).as(s"${name}_${s}_$t")): _*)
+        s_tmp = t_tmp.join(s_tmp, s_tmp(key)===t_tmp(key), "left_outer")
+        s_tmp = s_tmp.drop(t_tmp(key))
+      }
+
+      result = result.join(s_tmp, s_tmp(key)===result(key), "left_outer")
+      result = result.drop(s_tmp(key))
+      println(s"result s_$s: "+result.columns.mkString(","))
+    }
 
     result.write.mode(SaveMode.Overwrite).saveAsTable(s"$dstDb.${srcTable}_new")
   }

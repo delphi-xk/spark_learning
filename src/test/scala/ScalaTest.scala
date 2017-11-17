@@ -287,10 +287,21 @@ object ScalaTest {
     println(li.mkString("|"))
   }
 
-  def testSet(): Unit = {
+  def concatList(prefix:String, list1:Array[String], list2:Array[String]): Array[String] = {
+    val res = new ArrayBuffer[String]()
+    for(i <- list1){
+      for(j <- list2){
+        res += prefix+"_"+i+"_"+j
+      }
+    }
+    res.toArray
+  }
 
+  def testSet(): Unit = {
+    val stampRange = Range(0,5).map(x => x.toString).toArray
     val keys = PropertyUtils.transType.keySet().toArray(Array[String]("")).sortBy(x => x.drop(2).toInt)
-    keys.foreach(println)
+    val test = concatList("res",keys, stampRange)
+    test.foreach(println)
   }
 
   val endDate = PropertyUtils.dynamic("start_date")
@@ -304,7 +315,9 @@ object ScalaTest {
   }
 
 
+
   def main(args: Array[String]) {
+
     //test5()
     //for (i <- 0 to 20)println(s"fib($i): "+fibonacci(i))
     /*    println(testSumSquare(5))
@@ -315,7 +328,8 @@ object ScalaTest {
     //testZip()
     //testList()
     //println(stampFunc("20180301"))
-    testSet
+    //testSet
+
   }
 
 }
