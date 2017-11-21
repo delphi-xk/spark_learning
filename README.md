@@ -34,3 +34,12 @@ spark-submit --class com.hyzs.spark.sql.BusinessTest \
   -v  ../spark_learning-1.0.jar
 
 ```
+
+## time efficiency
+
+### spark 1.5.1 :
+1. exceed maximum thread pool num 128 will cause RejectedExecutionException: 36*4= 144
+2. use small table join accumulated table(big)
+
+### spark 1.6.0 :
+1. all left join cause GC overhead and StackOverFlow

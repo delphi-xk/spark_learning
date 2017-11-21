@@ -82,6 +82,11 @@
             <artifactId>spark-hive_2.10</artifactId>
             <version>${spark.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>RELEASE</version>
+        </dependency>
         <!--		<dependency>
                     <groupId>org.apache.spark</groupId>
                     <artifactId>spark-streaming_2.10</artifactId>
@@ -93,7 +98,7 @@
             <artifactId>mysql-connector-java</artifactId>
             <version>5.1.37</version>
         </dependency>-->
-        <dependency>
+<!--        <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>RELEASE</version>
@@ -102,7 +107,7 @@
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
             <version>1.2.3</version>
-        </dependency>
+        </dependency>-->
 
     </dependencies>
 

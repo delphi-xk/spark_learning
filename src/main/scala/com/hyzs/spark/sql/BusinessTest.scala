@@ -232,31 +232,33 @@ object BusinessTest {
       .filter(s"stamp <= 5")
       .groupBy(col(key),$"t_types", $"stamp")
       .agg(count(col(key)).as("count_"+key), aggCols : _*)
+      .repartition(col(key))
     swp.cache()
     println("swp cols: "+swp.columns.mkString(","))
 
     // drop cols client_no, t_types, stamp
-    // build table(small) join probe table(big)
     val cols = swp.columns.drop(3)
 
-    val ids = swp.select(key).distinct().orderBy(key)
+    // build table(small) join probe table(big)
+
+    val ids = swp.select(key).distinct()
+    //ids.cache()
     var result = ids
+
     for(s <- stampRange){
       var s_tmp = ids
       for (t <- typeRange){
         val t_tmp = swp.filter($"stamp" === s && $"t_types" === t)
           .select(col(key) +: cols.map(name => col(name).as(s"${name}_${s}_$t")): _*)
-        s_tmp = t_tmp.join(s_tmp, s_tmp(key)===t_tmp(key), "left_outer")
-        s_tmp = s_tmp.drop(t_tmp(key))
+        s_tmp = t_tmp.join(s_tmp, Seq(key), "left_outer")
       }
-
-      result = result.join(s_tmp, s_tmp(key)===result(key), "left_outer")
-      result = result.drop(s_tmp(key))
-      println(s"result s_$s: "+result.columns.mkString(","))
+      result = s_tmp.join(result, Seq(key), "left_outer").repartition(col(key))
     }
 
     result.write.mode(SaveMode.Overwrite).saveAsTable(s"$dstDb.${srcTable}_new")
   }
+
+
 
   def getHisStartDate(endDate:String, slotNum:Int, slotSec:Long) : String = {
     val format = new SimpleDateFormat("yyyyMMdd")
@@ -265,7 +267,6 @@ object BusinessTest {
     hisStartDate
   }
 
-  // TODO: process event_type_data
   // transMap   key:value   1000:ty1   1122:ty2 ...
   def returnTransMap(): mutable.Map[String, String] = {
     val transType = mutable.Map[String, String]()
@@ -276,7 +277,6 @@ object BusinessTest {
     }
     transType
   }
-
 
   // transList   1000,1122, ...
   def returnTransList(): List[String] = {
