@@ -253,11 +253,10 @@ object ScalaTest {
 
   def returnTransMap(): mutable.Map[String, String] = {
     val transType = mutable.Map[String, String]()
-    for ( (k,v) <- PropertyUtils.transType){
-      for ( e <- v.replaceAll("\\(|\\)","").split(",")){
-        transType put (e,k)
-      }
-    }
+    for{
+      (k,v) <- PropertyUtils.transType
+      e <- v.replaceAll("\\(|\\)","").split(",")
+    } transType put (e,k)
     transType
   }
 
@@ -316,8 +315,15 @@ object ScalaTest {
 
 
 
-  def main(args: Array[String]) {
+  def listToString(list: List[String]): String ={
+    list match {
+      case Nil => ""
+      case str :: rest => str + " , "+ listToString(rest)
+    }
+  }
 
+  def main(args: Array[String]) {
+    //println(returnTransMap)
     //test5()
     //for (i <- 0 to 20)println(s"fib($i): "+fibonacci(i))
     /*    println(testSumSquare(5))
@@ -329,7 +335,8 @@ object ScalaTest {
     //testList()
     //println(stampFunc("20180301"))
     //testSet
-
+    val li = List("aaa","bbb","ccc")
+    println(listToString(li))
   }
 
 }

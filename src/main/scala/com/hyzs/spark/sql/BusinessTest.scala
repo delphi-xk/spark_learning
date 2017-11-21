@@ -270,11 +270,10 @@ object BusinessTest {
   // transMap   key:value   1000:ty1   1122:ty2 ...
   def returnTransMap(): mutable.Map[String, String] = {
     val transType = mutable.Map[String, String]()
-    for ( (k,v) <- PropertyUtils.transType){
-      for ( e <- v.replaceAll("\\(|\\)","").split(",")){
-        transType put (e,k)
-      }
-    }
+    for{
+      (k,v) <- PropertyUtils.transType
+      e <- v.replaceAll("\\(|\\)","").split(",")
+    } transType put (e,k)
     transType
   }
 
