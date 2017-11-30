@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 log_path=/home/xiangk/workspace/crontest
 property_path=${log_path}/config

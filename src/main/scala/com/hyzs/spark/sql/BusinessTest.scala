@@ -28,6 +28,7 @@ object BusinessTest {
 
   def main(args: Array[String]): Unit =  {
     sqlContext.setConf("spark.sql.shuffle.partitions", "53")
+    //sqlContext.setConf("spark.dynamicAllocation.enabled", "true")
     //sqlContext.sql("set spark.sql.shuffle.partitions = 10")
     //generateSummary2()
     //testSave()

@@ -43,3 +43,16 @@ spark-submit --class com.hyzs.spark.sql.BusinessTest \
 
 ### spark 1.6.0 :
 1. all left join cause GC overhead and StackOverFlow
+
+### 4. big data test 
+1. set suitable executor parameters: num-executors, executor-memory, executor-cores(better not exceed 5), 
+and configuration spark.sql.shuffle.partition, make sure reasonable data size for each task(< 50M)
+2.  for 80 Vcores, 500G mem:
+```
+--conf spark.sql.shuffle.partitions=480 \
+--driver-memory 20G \
+--num-executors 22 \
+--executor-memory 20G \
+--executor-cores 4
+
+```
