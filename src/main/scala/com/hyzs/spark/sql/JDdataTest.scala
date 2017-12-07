@@ -3,6 +3,7 @@ package com.hyzs.spark.sql
 
 import java.text.SimpleDateFormat
 
+
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -149,6 +150,8 @@ object JDdataTest {
 
   }
 
+
+
   def main(args: Array[String]): Unit = {
     for(table <- infoTables){
       createDFfromCsv(s"/hyzs/data/$table").write.saveAsTable(table)
@@ -171,6 +174,192 @@ object JDdataTest {
       val stamp = Math.floor((oldDateUnix - startDateUnix)/slotSecs)
       stamp.toInt
     }*/
+
+  }
+
+  // change column type double to string
+  // and process NA values
+  // split in 1207: val split = data.randomSplit(Array(0.7,0.29,0.01))
+  def processNA(): Unit ={
+    val df = sqlContext.sql("select * from hyzs.hive_result_1201")
+
+    val cols = df.columns
+    cols.filter(x => x.contains("stamp")).map(x => s"cast ($x as string) $x")
+    val rest = cols.drop(11)
+    val df2 = df.selectExpr("user_id"+:cols.filter(x => x.contains("stamp")).map(x => s"cast ($x as string) $x") ++: rest : _*)
+    val result = df2.na.fill("\\N")
+      .na.replace("*", Map("null" -> "\\N", "NULL" -> "\\N", "-9999" -> "\\N"))
+      .dropDuplicates(Seq("user_id"))
+    result.write.saveAsTable("hyzs.result_1204")
+
+    val consume = result
+      .drop("jdmall_ordr_f0116")
+      .drop("jdmall_user_p0001")
+    val splitData = consume.randomSplit(Array(0.7, 0.3))
+    val train = splitData(0)
+    val valid = splitData(1)
+    train.write.saveAsTable("hyzs.result_consume_train_1204")
+    valid.write.saveAsTable("hyzs.result_consume_valid_1204")
+
+
+
+  }
+
+  def consumeLabelProcess(): Unit ={
+    import org.apache.spark.ml.feature.VectorAssembler
+    import org.apache.spark.ml.feature.MinMaxScaler
+    import org.apache.spark.mllib.linalg.{Vector, Vectors}
+    import org.apache.spark.mllib.linalg.Matrices
+    import org.apache.spark.ml.feature.StandardScaler
+
+    val df = sqlContext.sql(" select * from result_1201_2")
+      .na.replace("*", Map("\\N" -> "0.0"))
+
+    // trans data to double, then assemble to Vector
+    val data = df.selectExpr("user_id", "cast ( jdmall_ordr_f0116 as double ) jdmall_ordr_f0116 ",
+      " cast ( jdmall_user_p0001 as double ) jdmall_user_p0001 ")
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("jdmall_ordr_f0116", "jdmall_user_p0001"))
+      .setOutputCol("label_feature")
+    val trans = assembler.transform(data)
+
+    // normalize Vector features
+/*    val scaler = new StandardScaler()
+      .setInputCol("label_feature")
+      .setOutputCol("scaled_feature")
+      .setWithStd(true)
+      .setWithMean(false)*/
+    val scaler = new MinMaxScaler()
+      .setInputCol("label_feature")
+      .setOutputCol("scaled_feature")
+
+    val scaledModel = scaler.fit(trans)
+    val scaledData = scaledModel.transform(trans)
+    scaledData.show
+
+/*    val weight = Vectors.dense(0.4, 0.6)
+    val value = Matrices.dense(1,2, Array(2,6))
+    value.multiply(weight)   */
+
+    val weightMatrix = Matrices.dense(1, 2, Array(0.5, 0.5))
+    val multiplyFunc : (Vector => Double) = (scaled: Vector) => {
+      weightMatrix.multiply(scaled).toArray.apply(0)
+    }
+    val multiplyUdf = udf(multiplyFunc)
+    val userLabel = scaledData.withColumn("label", multiplyUdf(col("scaled_feature")))
+      .select("user_id", "label")
+    userLabel.show(false)
+    userLabel.write.saveAsTable("hyzs.user_label_consume")
+
+    val trainData = sqlContext.sql("select * from result_consume_train_1204")
+    val validData = sqlContext.sql("select * from result_consume_valid_1204")
+    val trainLabel = trainData.select("user_id").join(userLabel, Seq("user_id"), "left_outer")
+    val validLabel = validData.select("user_id").join(userLabel, Seq("user_id"), "left_outer")
+    trainLabel.write.saveAsTable("hyzs.user_label_consume_train")
+    validLabel.write.saveAsTable("hyzs.user_label_consume_valid")
+
+
+  }
+  def valueLabelProcess(): Unit ={
+    import org.apache.spark.ml.feature.VectorAssembler
+    import org.apache.spark.ml.feature.MinMaxScaler
+    import org.apache.spark.mllib.linalg.{Vector, Vectors}
+    import org.apache.spark.mllib.linalg.Matrices
+
+    // mem_vip_f0008: 0/1  ->  0.01/1
+    val df = sqlContext.sql(" select * from result_1205")
+      .na.replace("*", Map("\\N" -> "0"))
+      .na.replace("mem_vip_f0008", Map("0" -> "0.01"))
+    val data = df.selectExpr("user_id", "cast ( jdmall_user_f0007 as double ) jdmall_user_f0007 ",
+      "cast ( jdmall_user_f0009 as double ) jdmall_user_f0009",
+      "cast ( jdmall_user_f0014 as double ) jdmall_user_f0014",
+      "cast ( mem_vip_f0008 as double ) mem_vip_f0008")
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("jdmall_user_f0007", "jdmall_user_f0009", "jdmall_user_f0014"))
+      .setOutputCol("features")
+    val trans = assembler.transform(data)
+    val scaler = new MinMaxScaler()
+      .setInputCol("features")
+      .setOutputCol("scaled_feature")
+    val scaledModel = scaler.fit(trans)
+    val scaledData = scaledModel.transform(trans)
+
+    val assembler2 = new VectorAssembler()
+      .setInputCols(Array("scaled_feature","mem_vip_f0008"))
+      .setOutputCol("label_features")
+    val res = assembler2.transform(scaledData)
+    //res.show
+
+    val weightMatrix = Matrices.dense(1, 4, Array(0.3, 0.3, 0.3, 0.1))
+    val multiplyFunc : (Vector => Double) = (scaled: Vector) => {
+      weightMatrix.multiply(scaled).toArray.apply(0)
+    }
+    val multiplyUdf = udf(multiplyFunc)
+    val userLabel = res.withColumn("label", multiplyUdf(col("label_features")))
+      .select("user_id", "label")
+    userLabel.show(false)
+  }
+  def splitValueData(): Unit = {
+    val label = sqlContext.sql("select * from user_label_value")
+    val splitData = label.randomSplit(Array(0.7, 0.3))
+    val train_label = splitData(0)
+    val valid_label = splitData(1)
+    train_label.write.saveAsTable("hyzs.user_label_value_train")
+    valid_label.write.saveAsTable("hyzs.user_label_value_valid")
+
+//    val train_label = sqlContext.sql("select * from user_label_value_train")
+//    val valid_label = sql("select * from user_label_value_valid")
+    val data = sqlContext.sql("select * from result_1201_2")
+    val trimCols = List("jdmall_user_f0007", "jdmall_user_f0009", "jdmall_user_f0014", "mem_vip_f0008")
+    val cols = data.columns.filter( col => !trimCols.contains(col) )
+    val valueData = data.selectExpr(cols: _*)
+    val train = train_label.select("user_id").join(valueData, Seq("user_id"), "left_outer")
+    val valid = valid_label.select("user_id").join(valueData, Seq("user_id"), "left_outer")
+
+    train.write.saveAsTable("hyzs.result_value_train_1205")
+    valid.write.saveAsTable("hyzs.result_value_valid_1205")
+  }
+
+  def extractLabels(): Unit = {
+    val data = sqlContext.sql("select * from user_label_value").select("label")
+    val rdd = data.rdd.map(row => {
+      val i = row.getDouble(0)
+      f"$i%.1f"
+    } )
+    val df = rdd.toDF("label")
+    val stats = df.groupBy("label")
+      .agg(count("label").as("count_label"))
+      .orderBy("label")
+
+    stats.show(false)
+
+  }
+
+  def statusLabelFromPred(): Unit = {
+    // create dataframe with column "value"
+    val data = sqlContext.read.text("/hyzs/files/consume.pred")
+    val labelFunc : (String => String) = (label) => {
+      f"${label.toDouble}%.1f"
+    }
+    val labelUdf = udf(labelFunc)
+    val processData = data.withColumn("pred_label", labelUdf(col("value")))
+
+    val stats = processData.select("pred_label")
+      .groupBy("pred_label")
+      .agg(count("pred_label").as("count_label"))
+      .orderBy("pred_label")
+
+
+  }
+
+
+  def riskLabelProcess(): Unit= {
+    import org.apache.spark.ml.feature.VectorAssembler
+    import org.apache.spark.ml.feature.MinMaxScaler
+    import org.apache.spark.mllib.linalg.{Vector, Vectors}
+    import org.apache.spark.mllib.linalg.Matrices
+
+
 
   }
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-log_path=/home/xiangk/workspace/crontest
+log_path=/home/xiangk/workspace/crontest/
 property_path=${log_path}/config
 scrip_path=${log_path}/cron-job.sh
 echo "start crontab update job..."
@@ -11,7 +11,7 @@ add_month()
 }
 
 # log file format: log_%Y-%m-%d
-last_log_path=$(ls ${log_path}/log* -t | head -1)
+last_log_path=$(ls ${log_path}log* -t | head -1)
 last_file_name=$(basename ${last_log_path})
 # split file name by underscore
 last_run_date=$(echo ${last_file_name} | awk -F "_" '{print $2}')
