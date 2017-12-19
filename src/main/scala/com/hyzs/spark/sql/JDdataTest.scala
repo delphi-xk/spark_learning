@@ -214,6 +214,7 @@ object JDdataTest {
 
     val df = sqlContext.sql(" select * from result_1201_2")
       .na.replace("*", Map("\\N" -> "0.0"))
+    val filterCols = List("jdmall_ordr_f0116", "jdmall_user_p0001")
 
     // trans data to double, then assemble to Vector
     val data = df.selectExpr("user_id", "cast ( jdmall_ordr_f0116 as double ) jdmall_ordr_f0116 ",
@@ -266,10 +267,12 @@ object JDdataTest {
     import org.apache.spark.mllib.linalg.{Vector, Vectors}
     import org.apache.spark.mllib.linalg.Matrices
 
+    val filterCols = List("jdmall_user_f0007", "jdmall_user_f0009", "jdmall_user_f0014", "mem_vip_f0008")
     // mem_vip_f0008: 0/1  ->  0.01/1
     val df = sqlContext.sql(" select * from result_1205")
       .na.replace("*", Map("\\N" -> "0"))
       .na.replace("mem_vip_f0008", Map("0" -> "0.01"))
+
     val data = df.selectExpr("user_id", "cast ( jdmall_user_f0007 as double ) jdmall_user_f0007 ",
       "cast ( jdmall_user_f0009 as double ) jdmall_user_f0009",
       "cast ( jdmall_user_f0014 as double ) jdmall_user_f0014",
@@ -309,7 +312,7 @@ object JDdataTest {
 
 //    val train_label = sqlContext.sql("select * from user_label_value_train")
 //    val valid_label = sql("select * from user_label_value_valid")
-    val data = sqlContext.sql("select * from result_1201_2")
+    val data = sqlContext.sql("select * from result_1205")
     val trimCols = List("jdmall_user_f0007", "jdmall_user_f0009", "jdmall_user_f0014", "mem_vip_f0008")
     val cols = data.columns.filter( col => !trimCols.contains(col) )
     val valueData = data.selectExpr(cols: _*)
@@ -352,15 +355,109 @@ object JDdataTest {
 
   }
 
-
   def riskLabelProcess(): Unit= {
     import org.apache.spark.ml.feature.VectorAssembler
     import org.apache.spark.ml.feature.MinMaxScaler
     import org.apache.spark.mllib.linalg.{Vector, Vectors}
     import org.apache.spark.mllib.linalg.Matrices
 
+    val filterCols = List("mem_vip_f0001", "mem_vip_f0011")
+    val data = sqlContext.sql("select * from result_1205")
+    var labelData = data
+        .na.replace(Seq("mem_vip_f0011"), Map("\\N" -> "0"))
+        .na.replace("mem_vip_f0001", Map("\\N" -> "0.01", "0" -> "0.01"))
 
+    labelData = labelData.selectExpr("user_id",
+          "cast (mem_vip_f0011 as double) mem_vip_f0011",
+          "cast (mem_vip_f0001 as double) mem_vip_f0001")
+
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("mem_vip_f0011"))
+      .setOutputCol("features")
+    val trans = assembler.transform(labelData)
+    val scaler = new MinMaxScaler()
+      .setInputCol("features")
+      .setOutputCol("scaled_feature")
+    val scaledModel = scaler.fit(trans)
+    val scaledData = scaledModel.transform(trans)
+
+    val assembler2 = new VectorAssembler()
+      .setInputCols(Array("scaled_feature","mem_vip_f0001"))
+      .setOutputCol("label_features")
+    val res = assembler2.transform(scaledData)
+    val weightMatrix = Matrices.dense(1, 2, Array(0.5, 0.5))
+    val multiplyFunc : (Vector => Double) = (scaled: Vector) => {
+      weightMatrix.multiply(scaled).toArray.apply(0)
+    }
+    val multiplyUdf = udf(multiplyFunc)
+    val userLabel = res.withColumn("label", multiplyUdf(col("label_features")))
+      .select("user_id", "label")
+
+    userLabel.write.saveAsTable("hyzs.user_label_risk")
+    userLabel.show(false)
 
   }
+
+  def riskDataProcess(): Unit = {
+    val userLabel = sqlContext.sql("select * from hyzs.user_label_risk")
+    val filterCols = List("mem_vip_f0001", "mem_vip_f0011")
+    val data = sqlContext.sql("select * from result_1205")
+    val cols = data.columns diff filterCols
+    val riskData = data.selectExpr(cols: _*)
+    val split = riskData.randomSplit(Array(0.7, 0.29, 0.01))
+    val train = split(0)
+    val valid = split(1)
+    val test = split(2)
+    train.limit(10000000).write.saveAsTable("hyzs.result_risk_part_train")
+    valid.limit(3000000).write.saveAsTable("hyzs.result_risk_part_valid")
+    test.write.saveAsTable("hyzs.result_risk_test")
+
+    val trainLabel = train.select("user_id")
+        .join(userLabel, Seq("user_id"), "left_outer")
+    val validLabel = valid.select("user_id")
+      .join(userLabel, Seq("user_id"), "left_outer")
+    trainLabel.write.saveAsTable("hyzs.user_label_risk_train")
+    validLabel.write.saveAsTable("hyzs.user_label_risk_valid")
+
+  }
+
+
+  def importList(): Unit= {
+    val data  = sc.textFile("/hyzs/files/pinlist.txt")
+    data.map( pin => pin.toLowerCase)
+      .toDF("user_id")
+      .write.saveAsTable("jsbrpt_list")
+
+  }
+
+  def predProcess(): Unit ={
+    //val pinList = sqlContext.sql("select * from jsbrpt_list")
+    sqlContext.sql("use hyzs")
+    sqlContext.sql("drop table result_risk_test_jsbrpt")
+    val pinList = sqlContext.sql("select a.* from result_1205 a, jsbrpt_list b where a.user_id = b.user_id")
+    val all = sqlContext.sql("select * from result_1205")
+
+    val consumeFilterCols = List("jdmall_ordr_f0116", "jdmall_user_p0001")
+    val consumeCols = all.columns diff consumeFilterCols
+    val consumeTest = pinList.join(all, Seq("user_id"), "left_outer").selectExpr(consumeCols: _*)
+    consumeTest.write.saveAsTable("hyzs.result_consume_test_jsbrpt")
+
+    val valueFilterCols = List("jdmall_user_f0007", "jdmall_user_f0009", "jdmall_user_f0014", "mem_vip_f0008")
+    val valueCols = all.columns diff valueFilterCols
+    val valueTest = pinList.join(all, Seq("user_id"), "left_outer").selectExpr(valueCols: _*)
+    valueTest.write.saveAsTable("hyzs.result_value_test_jsbrpt")
+
+    //TODO: re-train risk model, and remove pay_syt_f0011
+/*    val riskFilterCols = List("mem_vip_f0001", "mem_vip_f0011")
+    val riskCols = all.columns diff riskFilterCols
+    val riskTest = pinList.join(all, Seq("user_id"), "left_outer").selectExpr(riskCols: _*)
+    riskTest.write.saveAsTable("hyzs.result_risk_test_jsbrpt")*/
+    val riskFilterCols = List("mem_vip_f0001", "mem_vip_f0011", "pay_syt_f0011")
+    val riskCols = pinList.columns diff riskFilterCols
+    val riskTest = pinList.selectExpr(riskCols: _*)
+    riskTest.write.saveAsTable("hyzs.result_risk_test_jsbrpt")
+  }
+
+
 
 }
