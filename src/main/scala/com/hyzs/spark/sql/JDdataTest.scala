@@ -3,11 +3,12 @@ package com.hyzs.spark.sql
 
 import java.text.SimpleDateFormat
 
-
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql._
+import org.apache.spark.{SparkConf, SparkContext}
+
 /**
   * Created by XIANGKUN on 2017/11/27.
   */
@@ -29,6 +30,19 @@ object JDdataTest {
     val content = data.filter( line => line != header)
     val cols = header.split(delimiter).map( col => StructField(col, StringType))
     val rows = content.map( lines => lines.split(delimiter))
+      .map(fields => Row(fields: _*))
+
+    val struct = StructType(cols)
+    sqlContext.createDataFrame(rows, struct)
+  }
+
+  import org.apache.spark.sql.functions._
+  import org.apache.spark.sql.types.{StringType, StructField, StructType}
+  import org.apache.spark.sql._
+  def createDFfromRawCsv(header: List[String], path: String, delimiter: String = ","): DataFrame = {
+    val data = sc.textFile(path)
+    val cols = header.map( col => StructField(col, StringType))
+    val rows = data.map( lines => lines.split(delimiter))
       .map(fields => Row(fields: _*))
     val struct = StructType(cols)
     sqlContext.createDataFrame(rows, struct)
@@ -459,5 +473,196 @@ object JDdataTest {
   }
 
 
+  def generateLabelTables(): Unit = {
+    val pin7 = sqlContext.sql("select * from pin7labels")
+/*    val label1 = pin7.select(
+      $"pin", $"label",
+      when(pin7("label")==="1","1")
+        .otherwise("0")
+        .as("new_label_1")
+    )
+    pin7.groupBy("label").agg(count("label").as("count_label")).show
+    */
+
+/*    val pinAll = sqlContext.sql("select a.* from pin7labels a, result_1205 b where a.pin = b.user_id")
+    pinAll.write.saveAsTable("hyzs.pin_all_labels")*/
+    val pinAll = sqlContext.sql("select * from pin_all_labels")
+    for( index <- 1 to 7){
+      sqlContext.sql(s"drop table hyzs.pin_label_$index")
+      pinAll.select(
+        $"pin".as("user_id"),
+        when($"label" === s"$index","1").otherwise("0").as("label"))
+        .write.saveAsTable(s"hyzs.pin_label_$index")
+    }
+
+  }
+
+  def generateLabelDataSets(): Unit = {
+    val pinData = sqlContext.sql("select b.* from pin_all_labels a, result_1205 b where a.pin = b.user_id")
+    pinData.write.saveAsTable("hyzs.pin_all_data")
+
+    val split = pinData.randomSplit(Array(0.7, 0.2, 0.1))
+    val train = split(0)
+    val valid = split(1)
+    val test = split(2)
+    train.write.saveAsTable("hyzs.pin_data_train")
+    valid.write.saveAsTable("hyzs.pin_data_valid")
+    test.write.saveAsTable("hyzs.pin_data_test")
+
+/*    sqlContext.sql("select b.label from pin_data_train a, pin_all_labels b where a.user_id = b.pin")
+      .groupBy("label").agg(count("label").as("count_label")).show(false)*/
+
+  }
+
+  def processResultData(): Unit = {
+    val labels = sqlContext.sql("select * from hyzs.pin7labels")
+/*    val pin1 = createDFfromRawCsv(List("pin","pred_1"),"/hyzs/files/pin_1.result")
+    val pin2 = createDFfromRawCsv(List("pin","pred_2"),"/hyzs/files/pin_2.result")
+    val pin3 = createDFfromRawCsv(List("pin","pred_3"),"/hyzs/files/pin_3.result")
+    val pin4 = createDFfromRawCsv(List("pin","pred_4"),"/hyzs/files/pin_4.result")
+    val pin5 = createDFfromRawCsv(List("pin","pred_5"),"/hyzs/files/pin_5.result")
+    val pin6 = createDFfromRawCsv(List("pin","pred_6"),"/hyzs/files/pin_6.result")
+    val pin7 = createDFfromRawCsv(List("pin","pred_7"),"/hyzs/files/pin_7.result")
+
+    val result = labels.join(pin1, Seq("pin"))
+      .join(pin2, Seq("pin"))
+      .join(pin3, Seq("pin"))
+      .join(pin4, Seq("pin"))
+      .join(pin5, Seq("pin"))
+      .join(pin6, Seq("pin"))
+      .join(pin7, Seq("pin"))
+      .dropDuplicates(Seq("pin"))
+
+    sqlContext.sql("drop table hyzs.pin_result")
+    result.write.saveAsTable("hyzs.pin_result")*/
+
+    val pin1 = createDFfromRawCsv(List("pin","pred_1"),"/hyzs/files/train_pin_1.result")
+    val pin2 = createDFfromRawCsv(List("pin","pred_2"),"/hyzs/files/train_pin_2.result")
+    val pin3 = createDFfromRawCsv(List("pin","pred_3"),"/hyzs/files/train_pin_3.result")
+    val pin4 = createDFfromRawCsv(List("pin","pred_4"),"/hyzs/files/train_pin_4.result")
+    val pin5 = createDFfromRawCsv(List("pin","pred_5"),"/hyzs/files/train_pin_5.result")
+    val pin6 = createDFfromRawCsv(List("pin","pred_6"),"/hyzs/files/train_pin_6.result")
+    val pin7 = createDFfromRawCsv(List("pin","pred_7"),"/hyzs/files/train_pin_7.result")
+
+    val result = labels.join(pin1, Seq("pin"))
+      .join(pin2, Seq("pin"))
+      .join(pin3, Seq("pin"))
+      .join(pin4, Seq("pin"))
+      .join(pin5, Seq("pin"))
+      .join(pin6, Seq("pin"))
+      .join(pin7, Seq("pin"))
+      .dropDuplicates(Seq("pin"))
+
+    sqlContext.sql("drop table hyzs.train_pin_result")
+    result.write.saveAsTable("hyzs.train_pin_result")
+
+    val aggCols = (1 to 7).flatMap(
+      index => List(
+        max(col(s"pred_$index")),
+        min(col(s"pred_$index")),
+        avg(col(s"pred_$index"))
+      )
+    )
+    // train pred aggregation data
+    val row = result.select(aggCols: _*).rdd.first()
+
+
+  }
+
+
+
+  /**
+    * v1 = max(train-yi), v2 = min(train-yi), v3 = avg(train-yi)
+    * y' = 1 / (1 + e^(-5 * (y-v3)/(v1-v2)))
+    *
+    */
+
+  def refinePredResult(): Unit = {
+    import org.apache.spark.ml.feature.VectorAssembler
+    import org.apache.spark.ml.feature.V
+    import org.apache.spark.mllib.linalg.{Vector, Vectors}
+
+    /*    val v1 = Vectors.dense(Array(0.1, 0.2, 0.11))
+    v1.toArray.max
+    v1.toArray.min
+    v1.toArray.sum / v1.toArray.length*/
+
+     val raw = sqlContext.sql("select * from hyzs.pin_result")
+      .selectExpr("pin","phone","label",
+        "cast (pred_1 as double) pred_1",
+        "cast (pred_2 as double) pred_2",
+        "cast (pred_3 as double) pred_3",
+        "cast (pred_4 as double) pred_4",
+        "cast (pred_5 as double) pred_5",
+        "cast (pred_6 as double) pred_6",
+        "cast (pred_7 as double) pred_7"
+      )
+   val assembler = new VectorAssembler()
+      .setInputCols(Array("pred_1", "pred_2","pred_3","pred_4","pred_5","pred_6","pred_7"))
+      .setOutputCol("org_pred")
+    val trans = assembler.transform(raw)
+    /*
+    val processFunc : (Vector => Vector) = (vector) => {
+      val arr = vector.toArray
+      val min = arr.min
+      val max = arr.max
+      val avg = arr.sum / arr.length
+      val resArr = new Array[Double](arr.length)
+      for( i <- arr.indices){
+        resArr(i) = 1 / (1 + math.exp(-5 * (arr(i)-avg)/(max-min)) )
+      }
+      Vectors.dense(resArr)
+    }
+    */
+    val trainModelAgg = List(
+      List(0.482259,0.280304,0.38297577397471455),
+      List(0.56917,0.282898,0.3283459518963921),
+      List(0.493648,0.281042,0.3916670653715695),
+      List(0.432489,0.294216,0.3357228556891765),
+      List(0.445886,0.291254,0.3337333869873574),
+      List(0.724011,0.296836,0.42110070212765977),
+      List(0.492292,0.281987,0.29871587819919826)
+    )
+
+    val processFunc: (Vector => Vector) = (vector) => {
+      val arr = vector.toArray
+      val resArr = new Array[Double](arr.length)
+      for(i <- arr.indices){
+        val max = trainModelAgg(i)(0)
+        val min = trainModelAgg(i)(1)
+        val avg = trainModelAgg(i)(2)
+        resArr(i) = 1 / (1 + math.exp(-5 * (arr(i)-avg)/(max-min)) )
+      }
+      Vectors.dense(resArr)
+    }
+    val processUdf = udf(processFunc)
+
+    // label start with 1
+    val findMaxIndexFunc: (Vector => Int) = (vector) => {
+      val arr = vector.toArray
+      arr.zipWithIndex.maxBy(_._1)._2 + 1
+    }
+    val findMaxUdf = udf(findMaxIndexFunc)
+
+    // calculate accuracy
+    /*val calAccFunc: ( Int,Int ) => Double = (label, pred_label) => {
+
+    }*/
+
+    sqlContext.sql("drop table hyzs.pin_result_refined")
+    val refined = trans
+      .withColumn("org_pred_label", findMaxUdf(col("org_pred")))
+      .withColumn("refined_pred", processUdf(col("org_pred")))
+      .withColumn("refined_pred_label", findMaxUdf(col("refined_pred")))
+    refined.write.saveAsTable("hyzs.pin_result_refined")
+    refined.select("phone","label",
+      "org_pred","org_pred_label",
+      "refined_pred","refined_pred_label")
+      .rdd.coalesce(1).saveAsTextFile("/hyzs/files/pin_result_refined")
+
+    val vecToSeq = udf((v: Vector) => v.toArray)
+    
+
+  }
 
 }
