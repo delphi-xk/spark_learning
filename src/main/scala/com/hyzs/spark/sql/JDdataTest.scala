@@ -8,7 +8,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql._
 import org.apache.spark.{SparkConf, SparkContext}
-
+import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 /**
   * Created by XIANGKUN on 2017/11/27.
   */
@@ -578,9 +579,6 @@ object JDdataTest {
     */
 
   def refinePredResult(): Unit = {
-    import org.apache.spark.ml.feature.VectorAssembler
-    import org.apache.spark.ml.feature.V
-    import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
     /*    val v1 = Vectors.dense(Array(0.1, 0.2, 0.11))
     v1.toArray.max
@@ -660,9 +658,47 @@ object JDdataTest {
       "refined_pred","refined_pred_label")
       .rdd.coalesce(1).saveAsTextFile("/hyzs/files/pin_result_refined")
 
-    val vecToSeq = udf((v: Vector) => v.toArray)
-    
+    val output = dissembleVector(refined, Seq("phone", "label"), "refined_pred", "pred")
+    output
+      .rdd
+      .coalesce(1)
+      .saveAsTextFile("/hyzs/pin_result_2")
+  }
 
+
+
+  /**
+    * dissemble vector to columns with prefix colPrefix
+    * @param df source dataframe
+    * @param idCols reserved columns
+    * @param vectorName vector column name
+    * @param colPrefix generated new column prefix
+    * @return
+    */
+
+  def dissembleVector(df: DataFrame, idCols: Seq[String], vectorName: String, colPrefix: String): DataFrame = {
+    val vecSize = df.select(vectorName).first().getAs[Vector](0).size
+    val newCols = (0 until vecSize).map( i => s"${colPrefix}_${i+1}")
+    dissembleVectorWithSeq(df, idCols, vectorName, newCols)
+  }
+
+  /**
+    * vector length should be the same with cols size
+    * dissemble vector to columns
+    * @param df source dataframe
+    * @param idCols reserved columns
+    * @param vectorName vector column name
+    * @param cols new column names
+    * @return
+    */
+  def dissembleVectorWithSeq(df: DataFrame, idCols: Seq[String], vectorName: String, cols: Seq[String]): DataFrame = {
+    val vecToSeqFunc = udf((v: Vector) => v.toArray)
+    val newCols = cols.zipWithIndex.map{
+      case (col, index) => $"_tmp".getItem(index).as(col)
+    }
+    df.withColumn(
+      "_tmp", vecToSeqFunc(col(vectorName)))
+      .select( idCols.map(id => col(id)) ++: newCols: _* )
   }
 
 }
