@@ -567,10 +567,7 @@ object JDdataTest {
     // train pred aggregation data
     val row = result.select(aggCols: _*).rdd.first()
 
-
   }
-
-
 
   /**
     * v1 = max(train-yi), v2 = min(train-yi), v3 = avg(train-yi)
