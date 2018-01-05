@@ -3,8 +3,7 @@ package com.hyzs.spark.sql
 
 import java.text.SimpleDateFormat
 
-import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.sql.functions._
+
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql._
 import org.apache.spark.{SparkConf, SparkContext}
@@ -698,4 +697,22 @@ object JDdataTest {
       .select( idCols.map(id => col(id)) ++: newCols: _* )
   }
 
+
+  import org.apache.spark.ml.feature.{StringIndexer, VectorAssembler}
+  def convertStringToIndices(): Unit= {
+    val train = sqlContext.sql("select * from pin_data_train")
+
+    val df = train.select("user_id", "count_id_stamp0", "jdmall_user_p0003","jdmall_user_p0004","jdmall_user_p0005")
+    val indexer = new StringIndexer()
+      .setInputCol("jdmall_user_p0003")
+      .setOutputCol("categoryIndex")
+      .fit(df)
+    val indexed = indexer.transform(df)
+
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("jdmall_user_p0003","jdmall_user_p0004","jdmall_user_p0005"))
+      .setOutputCol("features")
+    val transformed = assembler.transform(df)
+
+  }
 }
