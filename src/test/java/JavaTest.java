@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAccessor;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -130,6 +131,18 @@ public class JavaTest {
 
     }
 
+
+    @Test
+    public void generateFile() throws Exception{
+        BufferedWriter writer = new BufferedWriter(new FileWriter(new File("d:/workspace/pred_test")));
+        for(int i =0;i<=10000;i++){
+            Random random = new Random();
+            int id = random.nextInt(1000);
+            String val = random.nextDouble()*100+"";
+            writer.write(id+","+val+"\n");
+        }
+        writer.close();
+    }
 
     public static boolean checkNotEmpty(String str){
         return !(str == null || str.isEmpty());

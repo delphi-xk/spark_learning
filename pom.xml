@@ -14,6 +14,7 @@
         <spark.version>1.6.0</spark.version>
         <scala.version>2.10.5</scala.version>
         <scala.tools.version>2.10</scala.tools.version>
+        <hbase.version>1.2.6</hbase.version>
     </properties>
 
     <dependencies>
@@ -101,8 +102,27 @@
             <version>1.5.0</version>
         </dependency>
 
-
-
+        <!-- hbase -->
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-common</artifactId>
+            <version>${hbase.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-client</artifactId>
+            <version>${hbase.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-server</artifactId>
+            <version>${hbase.version}</version>
+        </dependency>
+<!--        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-spark</artifactId>
+            <version>${hbase.version}</version>
+        </dependency>-->
         <!--		<dependency>
                     <groupId>org.apache.spark</groupId>
                     <artifactId>spark-streaming_2.10</artifactId>

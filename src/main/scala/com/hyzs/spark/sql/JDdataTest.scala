@@ -571,7 +571,7 @@ object JDdataTest {
 
   /**
     * v1 = max(train-yi), v2 = min(train-yi), v3 = avg(train-yi)
-    * y' = 1 / (1 + e^(-5 * (y-v3)/(v1-v2)))
+    * y' = 1 / (1 + exp(-5 * (y-v3)/(v1-v2)))
     *
     */
 
