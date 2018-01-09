@@ -335,8 +335,10 @@ object ScalaTest {
     //testList()
     //println(stampFunc("20180301"))
     //testSet
-    val li = List("aaa","bbb","ccc")
-    println(listToString(li))
+//    val li = List("aaa","bbb","ccc")
+//    println(listToString(li))
+
+
   }
 
 }

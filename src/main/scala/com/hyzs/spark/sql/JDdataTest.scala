@@ -21,8 +21,8 @@ object JDdataTest {
   val sc = new SparkContext(conf)
   val sqlContext = new org.apache.spark.sql.SQLContext(sc)
   import sqlContext.implicits._
-  sqlContext.setConf("spark.sql.shuffle.partitions", "337")
-  sqlContext.setConf("spark.shuffle.file.buffer", "4096k")
+  //sqlContext.setConf("spark.sql.shuffle.partitions", "337")
+  //sqlContext.setConf("spark.shuffle.file.buffer", "4096k")
 
   def createDFfromCsv(path: String, delimiter: String = "\\t"): DataFrame = {
     val data = sc.textFile(path)
@@ -47,6 +47,15 @@ object JDdataTest {
     val struct = StructType(cols)
     sqlContext.createDataFrame(rows, struct)
   }
+
+
+  def createDFfromSeparateFile(headerPath: String, dataPath: String,
+                               headerSplitter: String=",", dataSplitter: String="\\t"): DataFrame = {
+    val header = sc.textFile(headerPath)
+    val fields = header.first().split(headerSplitter)
+    createDFfromRawCsv(fields.toList, dataPath, dataSplitter)
+  }
+
 
   val hisTable = "dmr_rec_s_user_order_amount_one_month"
   val infoTables = List(
