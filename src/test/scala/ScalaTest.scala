@@ -338,6 +338,8 @@ object ScalaTest {
     for( k <- labelProcessMap.keys){
       println(k)
     }
+    val key = "consume"
+    println(s"${labelProcessMap(key)}")
   }
   def main(args: Array[String]) {
     //println(returnTransMap)

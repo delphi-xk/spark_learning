@@ -68,9 +68,12 @@ object JDDataProcess {
     import org.apache.spark.mllib.linalg.Matrices
 
     if( countCols.length == weight.length){
-      val all_data = sqlContext.sql("select * from hyzs.all_data")
+      val allData = sqlContext.sql("select * from hyzs.all_data")
       val selectCols = countCols.map( col => s"cast ($col as double) $col")
-      val label_data = all_data.selectExpr(key +: selectCols : _*)
+      val label_data = allData
+        .na.replace(countCols.toSeq, Map("\\N" -> "0.01"))
+        .selectExpr(key +: selectCols : _*)
+
       // vector assembling
       val assembler = new VectorAssembler()
         .setInputCols(countCols)
@@ -96,6 +99,25 @@ object JDDataProcess {
     } else {
       throw new Exception("cols and weight length should be equal!")
     }
+  }
+
+  // import pin7labels.txt, generate label and data for class training
+  def generateClassLabelAndData(labelFilePath: String): Unit = {
+    val allLabels = createDFfromCsv(labelFilePath)
+    allLabels.write.saveAsTable("hyzs.pin_all_labels")
+    val tasks = Array("c1", "c2", "c3", "c4", "c5", "c6", "c7")
+    for(index <- 1 to 7){
+      sqlContext.sql(s"drop table hyzs.${tasks(index-1)}_label")
+      val classLabel = allLabels.select(
+        $"pin".as("user_id"),
+        when($"label" === s"$index","1").otherwise("0").as("label")
+      )
+      classLabel.write.saveAsTable(s"hyzs.${tasks(index-1)}_label")
+    }
+    sqlContext.sql("drop table hyzs.class_data")
+    val classData = sqlContext.sql("select b.* from hyzs.pin_all_labels a, hyzs.all_data b where a.pin = b.user_id ")
+    classData.write.saveAsTable("hyzs.class_data")
+
   }
 
   // ensure dataFrame.columns contains filterCols
@@ -207,7 +229,7 @@ object JDDataProcess {
     sqlContext.sql("create database hyzs")
     var joinedData : DataFrame = null
     var tables : List[String] = null
-    if( args(0) == "test"){
+    if(args(0) == "test"){
       joinedData = forTest()
     }
     else {
@@ -231,19 +253,16 @@ object JDDataProcess {
     }
 
     sqlContext.sql("drop table hyzs.all_data")
-    // process NA values, save
+    // process NA values, save all_data table
     val allData = processNA(joinedData)
     allData.write.saveAsTable("hyzs.all_data")
 
+    // if only for prediction, not need to split data or generate label table
     if (args(1) == "predict"){
       predictModelData(allData)
     } else {
       trainModelData(allData)
     }
-
-    // if only for prediction, not need to split data or generate label table
-
-
 
   }
 

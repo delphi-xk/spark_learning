@@ -502,7 +502,6 @@ object JDdataTest {
         when($"label" === s"$index","1").otherwise("0").as("label"))
         .write.saveAsTable(s"hyzs.pin_label_$index")
     }
-
   }
 
   def generateLabelDataSets(): Unit = {
