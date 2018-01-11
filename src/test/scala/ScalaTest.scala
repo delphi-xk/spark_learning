@@ -322,6 +322,23 @@ object ScalaTest {
     }
   }
 
+  def iterMap(): Unit = {
+    val labelProcessMap = Map(
+      "consume" ->
+        (Array("jdmall_ordr_f0116", "jdmall_user_p0001"), Array(0.5, 0.5)),
+      "value" ->
+        (Array("jdmall_user_f0007", "jdmall_user_f0009", "jdmall_user_f0014", "mem_vip_f0008"),
+          Array(0.3, 0.3, 0.3, 0.1)),
+      "risk" ->
+        (Array("mem_vip_f0011", "mem_vip_f0001"), Array(0.5, 0.5))
+    )
+    for ((k,v) <- labelProcessMap){
+      println(s"key:$k, value_1:${v._1.toString}, value_2:${v._2.toString}")
+    }
+    for( k <- labelProcessMap.keys){
+      println(k)
+    }
+  }
   def main(args: Array[String]) {
     //println(returnTransMap)
     //test5()
@@ -338,7 +355,7 @@ object ScalaTest {
 //    val li = List("aaa","bbb","ccc")
 //    println(listToString(li))
 
-
+    iterMap()
   }
 
 }

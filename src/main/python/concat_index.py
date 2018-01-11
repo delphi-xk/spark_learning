@@ -12,7 +12,7 @@ predLines = pred.readlines()
 if len(indexLines) == len(predLines):
     print("file lines equals")
     for i in range(len(indexLines)):
-        res.write(indexLines[i].rstrip("\n")+","+predLines[i])
+        res.write(indexLines[i].rstrip("\n")+"    "+predLines[i])
     res.close()
 else:
-    print("file lines not equal!")
+    print("file rows not equal!")

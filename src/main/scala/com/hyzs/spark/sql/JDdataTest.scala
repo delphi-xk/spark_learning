@@ -375,7 +375,6 @@ object JDdataTest {
       .agg(count("pred_label").as("count_label"))
       .orderBy("pred_label")
 
-
   }
 
   def riskLabelProcess(): Unit= {
