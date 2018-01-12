@@ -8,16 +8,27 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql._
+import org.apache.spark.sql.hive._
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
 
 object JDDataProcess {
 
+
   val conf = new SparkConf().setAppName("DataProcess")
   val sc = new SparkContext(conf)
-  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+  val sqlContext = new HiveContext(sc)
   import sqlContext.implicits._
   //sqlContext.setConf("spark.sql.shuffle.partitions", "2048")
   val key = "user_id"
   //val log = LogManager.getRootLogger
+
+  def checkHDFileExist(filePath: String): Boolean = {
+    val hdConf = sc.hadoopConfiguration
+    val fs = FileSystem.get(hdConf)
+    val path = new Path(filePath)
+    fs.exists(path)
+  }
 
   def createDFfromCsv(path: String, delimiter: String = "\\t"): DataFrame = {
     val data = sc.textFile(path)
@@ -45,6 +56,8 @@ object JDDataProcess {
 
   def createDFfromSeparateFile(headerPath: String, dataPath: String,
                                headerSplitter: String=",", dataSplitter: String="\\t"): DataFrame = {
+    println(s"header path: ${headerPath}, data path: ${dataPath}")
+
     val header = sc.textFile(headerPath)
     val fields = header.first().split(headerSplitter)
     createDFfromRawCsv(fields, dataPath, dataSplitter)
@@ -226,30 +239,33 @@ object JDDataProcess {
 
   def main(args: Array[String]): Unit = {
     // import txt to DataFrame
-    sqlContext.sql("create database hyzs")
-    var joinedData : DataFrame = null
-    var tables : List[String] = null
-    if(args(0) == "test"){
+    sqlContext.sql("create database IF NOT EXISTS hyzs ")
+
+/*    if(args(0) == "test"){
       joinedData = forTest()
     }
-    else {
-      val dataPath = sc.getConf.get("spark.processJob.dataPath")
-      val headerPath = sc.getConf.get("spark.processJob.headerPath")
-      val tableNames = sc.getConf.get("spark.processJob.fileNames")
-      val tables = tableNames.split(",")
+*/
+    val data = sc.getConf.get("spark.processJob.dataPath")
+    val header = sc.getConf.get("spark.processJob.headerPath")
+    val tableStr = sc.getConf.get("spark.processJob.fileNames")
+    val tables = tableStr.split(",")
+    val validTables = tables.filter(
+      tableName => checkHDFileExist(s"$header$tableName.txt") && checkHDFileExist(s"$data$tableName.txt"))
 
-      for(tableName <- tables){
-        val table = createDFfromSeparateFile(headerPath+tableName+".txt", dataPath+tableNames+".txt")
-        sqlContext.sql(s"drop table hyzs.$tableName")
-        table.write.saveAsTable(s"hyzs.$tableName")
-      }
-      // process business table, res start with hisTable
-      joinedData = processHis(tables(0))
-      // big table join process
-      for(tableName <- tables.drop(1)){
-        val table = sqlContext.sql(s"select * from hyzs.$tableName")
-        joinedData = joinedData.join(table, Seq(key), "left_outer")
-      }
+    for(tableName <- validTables){
+      val headerPath=s"$header$tableName.txt"
+      val dataPath=s"$data$tableName.txt"
+      val table = createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath)
+      sqlContext.sql(s"drop table if exists hyzs.$tableName")
+      table.write.saveAsTable(s"hyzs.$tableName")
+    }
+
+    // process business table, res start with hisTable
+    var joinedData = processHis(validTables(0))
+    // big table join process
+    for(tableName <- validTables.drop(1)){
+      val table = sqlContext.sql(s"select * from hyzs.$tableName")
+      joinedData = joinedData.join(table, Seq(key), "left_outer")
     }
 
     sqlContext.sql("drop table hyzs.all_data")
@@ -258,7 +274,7 @@ object JDDataProcess {
     allData.write.saveAsTable("hyzs.all_data")
 
     // if only for prediction, not need to split data or generate label table
-    if (args(1) == "predict"){
+    if (args.length>0 && args(0) == "predict"){
       predictModelData(allData)
     } else {
       trainModelData(allData)

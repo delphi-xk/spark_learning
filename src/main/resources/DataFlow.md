@@ -22,7 +22,7 @@ fileNames=dmt_upf_s_d_45,dmt_upf_s_d_42,dmt_upf_s_d_50……
 
 ##2 执行Spark任务，生成Libsvm文件
 
-**以下shell路径除特别说明，都为HDFS路径，可自定义**
+- 以下shell路径除特别说明，都为HDFS路径，可自定义
 ```shell
 for task in m1 m2 m3
 do
@@ -30,7 +30,7 @@ do
 	do
 	result_path=/hyzs/output/point/${task}/${data_type}/
 	table_name=hyzs.${task}_${data_type}
-	obj_file=/hyzs/output/point/${task}/${data_type}/${table_name}.obj
+	obj_file=/hyzs/output/point/${task}/train/hyzs.${task}_train.obj
 	label_table=${task}_label
 
 	/soft/spark/bin/spark-submit \
@@ -56,7 +56,40 @@ do
 done
 
 ```
-结果会在hdfs://hyzs/output/point/下生成三个任务目录m1, m2, m3（暂定的三个任务），每个目录下会生成对应train，valid，test目录
+- 结果会在hdfs://hyzs/output/point/下生成三个任务目录m1, m2, m3（暂定的三个任务），每个目录下会生成对应train，valid，test目录
+- **如果不需要训练模型，则只有test过程**
+
+```
+data_type=test
+for task in m1 m2 m3
+do
+    result_path=/hyzs/output/point/${task}/${data_type}/
+    table_name=hyzs.${task}_${data_type}
+    obj_file=/hyzs/output/point/${task}/train/hyzs.${task}_train.obj
+    label_table=${task}_label
+
+    /soft/spark/bin/spark-submit \
+    --class huacloud.convertLibSVM.ConvertLibSvmFF \
+    --master yarn-client \
+    --executor-cores 2 --num-executors 22 --driver-memory 20G --executor-memory 20G \
+    --conf 'spark.driver.maxResultSize=2048' \
+    --jars /soft/spark/lib/hadoop-lzo-0.4.20-SNAPSHOT.jar \
+    -v /export/home/hcfruser/convertLibSVM.jar \
+    "{'data_type':'"${data_type}"','table_name':'"${table_name}"',
+    'result_path':'"${result_path}"','client_no':'user_id','obj_file':'"${obj_file}"'}"
+
+    /soft/spark/bin/spark-submit \
+    --class huacloud.convertLibSVM.LibsvmffToLimsvm \
+    --master yarn-client \
+    --executor-cores 2 --num-executors 22 --driver-memory 20G --executor-memory 20G \
+    --jars /soft/spark/lib/hadoop-lzo-0.4.20-SNAPSHOT.jar \
+    -v /export/home/hcfruser/convertLibSVM.jar \
+    "{'data_type':'"${data_type}"','libsvmff_file':'"${result_path}${table_name}".libsvmff',
+    'label_table':'"${label_table}"','result_path':'"${result_path}"',
+    'client_no_colume':'user_id','label_colume':'label'}"
+done
+```
+
 
 ##3 将HDFS上生成文件拖到本地**basePath**下
 训练模型
@@ -83,7 +116,7 @@ do
     "subsample":"0.5","bst:max_depth":"5","gamma":"0.5"}'
 done
 ```
-根据模型文件，输入需要预测的文件，得到预测结果
+**如果不需要训练模型，则只有test过程**，根据模型文件，输入需要预测的文件，得到预测结果
 
 - path_test为预测的libsvm文件
 - test_pred为预测的结果文件

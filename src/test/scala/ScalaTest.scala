@@ -341,6 +341,9 @@ object ScalaTest {
     val key = "consume"
     println(s"${labelProcessMap(key)}")
   }
+
+
+
   def main(args: Array[String]) {
     //println(returnTransMap)
     //test5()
@@ -357,7 +360,10 @@ object ScalaTest {
 //    val li = List("aaa","bbb","ccc")
 //    println(listToString(li))
 
-    iterMap()
+    //iterMap()
+
+
+
   }
 
 }
