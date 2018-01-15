@@ -13,21 +13,38 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 
 object JDDataProcess {
-
-
   val conf = new SparkConf().setAppName("DataProcess")
   val sc = new SparkContext(conf)
   val sqlContext = new HiveContext(sc)
+  val hdConf = sc.hadoopConfiguration
+  val fs = FileSystem.get(hdConf)
+
+  //  val allConf = conf.getAll
+//  val hiveDir = allConf.filter(param => param._1 == "hive.metastore.warehouse.dir")
+  val warehouseDir = "/hyzs/warehouse/hyzs.db/"
+  //val hiveWareDir = "/user/hive/warehouse/"
+
   import sqlContext.implicits._
   //sqlContext.setConf("spark.sql.shuffle.partitions", "2048")
   val key = "user_id"
-  //val log = LogManager.getRootLogger
 
   def checkHDFileExist(filePath: String): Boolean = {
-    val hdConf = sc.hadoopConfiguration
-    val fs = FileSystem.get(hdConf)
     val path = new Path(filePath)
     fs.exists(path)
+  }
+
+  def dropHDFiles(filePath: String): Unit = {
+    val path = new Path(filePath)
+    fs.delete(path, true)
+  }
+
+  def saveTable(df: DataFrame, tableName:String): Unit = {
+    sqlContext.sql(s"drop table if exists hyzs.$tableName")
+    val path = s"$warehouseDir$tableName"
+    if(checkHDFileExist(path))dropHDFiles(path)
+    df.write
+      .option("path",path)
+      .saveAsTable(s"hyzs.$tableName")
   }
 
   def createDFfromCsv(path: String, delimiter: String = "\\t"): DataFrame = {
@@ -44,20 +61,19 @@ object JDDataProcess {
   def createDFfromRawCsv(header: Array[String], path: String, delimiter: String = ","): DataFrame = {
     val data = sc.textFile(path)
     val cols = header.map( col => StructField(col, StringType))
-    if(cols.length == data.first().split(delimiter).length){
+    //if(cols.length == data.first().split(delimiter).length){
       val rows = data.map( lines => lines.split(delimiter))
+        .filter(row => row.length <= cols.length)
         .map(fields => Row(fields: _*))
       val struct = StructType(cols)
-      sqlContext.createDataFrame(rows, struct).repartition(col(key))
-    } else {
-      throw new Exception(s"$path data columns not equal!")
-    }
+      sqlContext.createDataFrame(rows, struct)
+        .repartition(col(key))
+
   }
 
   def createDFfromSeparateFile(headerPath: String, dataPath: String,
                                headerSplitter: String=",", dataSplitter: String="\\t"): DataFrame = {
-    println(s"header path: ${headerPath}, data path: ${dataPath}")
-
+    //println(s"header path: ${headerPath}, data path: ${dataPath}")
     val header = sc.textFile(headerPath)
     val fields = header.first().split(headerSplitter)
     createDFfromRawCsv(fields, dataPath, dataSplitter)
@@ -68,8 +84,7 @@ object JDDataProcess {
     val swp = df1
       .groupBy(key).agg(count(key).as("count_id"), avg("user_payable_pay_amount").as("avg_pay_amount"))
       .selectExpr(key, "cast (count_id as string) count_id", "cast (avg_pay_amount as string) avg_pay_amount")
-    sqlContext.sql(s"drop table hyzs.${hisTable}_new")
-    swp.write.saveAsTable(s"hyzs.${hisTable}_new")
+    saveTable(swp, s"${hisTable}_new")
     swp
   }
 
@@ -107,8 +122,6 @@ object JDDataProcess {
       val userLabel = scaledData.withColumn("label", multiplyUdf(col("scaled_feature")))
         .select("user_id", "label")
       userLabel
-    //  sqlContext.sql(s"drop table hyzs.${taskName}_label")
-    //  userLabel.write.saveAsTable(s"hyzs.${taskName}_label")
     } else {
       throw new Exception("cols and weight length should be equal!")
     }
@@ -117,19 +130,17 @@ object JDDataProcess {
   // import pin7labels.txt, generate label and data for class training
   def generateClassLabelAndData(labelFilePath: String): Unit = {
     val allLabels = createDFfromCsv(labelFilePath)
-    allLabels.write.saveAsTable("hyzs.pin_all_labels")
+    saveTable(allLabels, "pin_all_labels")
     val tasks = Array("c1", "c2", "c3", "c4", "c5", "c6", "c7")
     for(index <- 1 to 7){
-      sqlContext.sql(s"drop table hyzs.${tasks(index-1)}_label")
       val classLabel = allLabels.select(
         $"pin".as("user_id"),
         when($"label" === s"$index","1").otherwise("0").as("label")
       )
-      classLabel.write.saveAsTable(s"hyzs.${tasks(index-1)}_label")
+      saveTable(classLabel, s"${tasks(index-1)}_label")
     }
-    sqlContext.sql("drop table hyzs.class_data")
     val classData = sqlContext.sql("select b.* from hyzs.pin_all_labels a, hyzs.all_data b where a.pin = b.user_id ")
-    classData.write.saveAsTable("hyzs.class_data")
+    saveTable(classData, "class_data")
 
   }
 
@@ -201,20 +212,15 @@ object JDDataProcess {
     )
     for( (task, params) <- labelProcessMap) {
       val labelTable = labelGenerateProcess(task, params._1, params._2)
-      sqlContext.sql(s"drop table hyzs.${task}_label")
-      labelTable.write.saveAsTable(s"hyzs.${task}_label")
+      saveTable(labelTable, s"${task}_label")
       val dataTable = dataGenerateProcess(allData, params._1)
       val splitData = dataTable.randomSplit(Array(0.7, 0.2, 0.1))
       val train = splitData(0)
       val valid = splitData(1)
       val test = splitData(2)
-      sqlContext.sql(s"drop table hyzs.${task}_train")
-      sqlContext.sql(s"drop table hyzs.${task}_valid")
-      sqlContext.sql(s"drop table hyzs.${task}_test")
-      train.write.saveAsTable(s"hyzs.${task}_train")
-      valid.write.saveAsTable(s"hyzs.${task}_valid")
-      test.write.saveAsTable(s"hyzs.${task}_test")
-
+      saveTable(train, s"${task}_train")
+      saveTable(valid, s"${task}_valid")
+      saveTable(test, s"${task}_test")
     }
   }
 
@@ -231,8 +237,7 @@ object JDDataProcess {
     )
     for((task, params) <- labelProcessMap){
       val dataTable = dataGenerateProcess(allData, params._1)
-      sqlContext.sql(s"drop table hyzs.${task}_test")
-      dataTable.write.saveAsTable(s"hyzs.${task}_test")
+      saveTable(dataTable, s"${task}_test")
     }
 
   }
@@ -249,6 +254,7 @@ object JDDataProcess {
     val header = sc.getConf.get("spark.processJob.headerPath")
     val tableStr = sc.getConf.get("spark.processJob.fileNames")
     val tables = tableStr.split(",")
+    // check and filter if file exists
     val validTables = tables.filter(
       tableName => checkHDFileExist(s"$header$tableName.txt") && checkHDFileExist(s"$data$tableName.txt"))
 
@@ -256,8 +262,7 @@ object JDDataProcess {
       val headerPath=s"$header$tableName.txt"
       val dataPath=s"$data$tableName.txt"
       val table = createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath)
-      sqlContext.sql(s"drop table if exists hyzs.$tableName")
-      table.write.saveAsTable(s"hyzs.$tableName")
+      saveTable(table, tableName)
     }
 
     // process business table, res start with hisTable
@@ -268,11 +273,9 @@ object JDDataProcess {
       joinedData = joinedData.join(table, Seq(key), "left_outer")
     }
 
-    sqlContext.sql("drop table hyzs.all_data")
     // process NA values, save all_data table
     val allData = processNA(joinedData)
-    allData.write.saveAsTable("hyzs.all_data")
-
+    saveTable(allData, "all_data")
     // if only for prediction, not need to split data or generate label table
     if (args.length>0 && args(0) == "predict"){
       predictModelData(allData)
