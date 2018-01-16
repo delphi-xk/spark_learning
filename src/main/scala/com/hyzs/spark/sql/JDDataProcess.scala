@@ -18,7 +18,7 @@ object JDDataProcess {
   val sqlContext = new HiveContext(sc)
   val hdConf = sc.hadoopConfiguration
   val fs = FileSystem.get(hdConf)
-
+  val partitionNums = sqlContext.getConf("spark.sql.shuffle.partitions").toInt
   //  val allConf = conf.getAll
 //  val hiveDir = allConf.filter(param => param._1 == "hive.metastore.warehouse.dir")
   val warehouseDir = "/hyzs/warehouse/hyzs.db/"
@@ -46,29 +46,28 @@ object JDDataProcess {
       .option("path",path)
       .saveAsTable(s"hyzs.$tableName")
   }
-
+  
   def createDFfromCsv(path: String, delimiter: String = "\\t"): DataFrame = {
     val data = sc.textFile(path)
     val header = data.first()
     val content = data.filter( line => line != header)
     val cols = header.split(delimiter).map( col => StructField(col, StringType))
     val rows = content.map( lines => lines.split(delimiter))
+      .filter(row => row.length <= cols.length)
       .map(fields => Row(fields: _*))
     val struct = StructType(cols)
-    sqlContext.createDataFrame(rows, struct).repartition(col(key))
+    sqlContext.createDataFrame(rows, struct)
   }
 
+  // filter malformed data
   def createDFfromRawCsv(header: Array[String], path: String, delimiter: String = ","): DataFrame = {
-    val data = sc.textFile(path)
+    val data = sc.textFile(path, partitionNums)
     val cols = header.map( col => StructField(col, StringType))
-    //if(cols.length == data.first().split(delimiter).length){
-      val rows = data.map( lines => lines.split(delimiter))
+    val rows = data.map( lines => lines.split(delimiter))
         .filter(row => row.length <= cols.length)
         .map(fields => Row(fields: _*))
       val struct = StructType(cols)
       sqlContext.createDataFrame(rows, struct)
-        .repartition(col(key))
-
   }
 
   def createDFfromSeparateFile(headerPath: String, dataPath: String,
@@ -84,7 +83,6 @@ object JDDataProcess {
     val swp = df1
       .groupBy(key).agg(count(key).as("count_id"), avg("user_payable_pay_amount").as("avg_pay_amount"))
       .selectExpr(key, "cast (count_id as string) count_id", "cast (avg_pay_amount as string) avg_pay_amount")
-    saveTable(swp, s"${hisTable}_new")
     swp
   }
 
@@ -129,17 +127,17 @@ object JDDataProcess {
 
   // import pin7labels.txt, generate label and data for class training
   def generateClassLabelAndData(labelFilePath: String): Unit = {
-    val allLabels = createDFfromCsv(labelFilePath)
+    val allLabels = createDFfromRawCsv(Array("phone", "label", "user_id"), labelFilePath, "\\t")
     saveTable(allLabels, "pin_all_labels")
     val tasks = Array("c1", "c2", "c3", "c4", "c5", "c6", "c7")
     for(index <- 1 to 7){
       val classLabel = allLabels.select(
-        $"pin".as("user_id"),
+        $"user_id",
         when($"label" === s"$index","1").otherwise("0").as("label")
       )
       saveTable(classLabel, s"${tasks(index-1)}_label")
     }
-    val classData = sqlContext.sql("select b.* from hyzs.pin_all_labels a, hyzs.all_data b where a.pin = b.user_id ")
+    val classData = sqlContext.sql("select b.* from hyzs.pin_all_labels a, hyzs.all_data b where a.user_id = b.user_id ")
     saveTable(classData, "class_data")
 
   }
@@ -156,42 +154,43 @@ object JDDataProcess {
    //   .dropDuplicates(Seq(key))
   }
 
+  val testTables = List(
+    //"dmr_rec_s_user_order_amount_one_month",
+    "dmr_rec_s_user_order_amount_one_month_new",
+    "dmr_rec_v_dmt_upf_s_d_0000017",
+    "dmr_rec_v_dmt_upf_s_d_0000030",
+    "dmr_rec_v_dmt_upf_s_d_0000034",
+    "dmr_rec_v_dmt_upf_s_d_0000035",
+    "dmr_rec_v_dmt_upf_s_d_0000056",
+
+    "dmr_rec_v_dmt_upf_s_d_1",
+    "dmr_rec_v_dmt_upf_s_d_10",
+    "dmr_rec_v_dmt_upf_s_d_2",
+    "dmr_rec_v_dmt_upf_s_d_21",
+    "dmr_rec_v_dmt_upf_s_d_3",
+    "dmr_rec_v_dmt_upf_s_d_34",
+
+    "dmr_rec_v_dmt_upf_s_d_4",
+    "dmr_rec_v_dmt_upf_s_d_42",
+    "dmr_rec_v_dmt_upf_s_d_44",
+    "dmr_rec_v_dmt_upf_s_d_45",
+    "dmr_rec_v_dmt_upf_s_d_47",
+    "dmr_rec_v_dmt_upf_s_d_48",
+
+    "dmr_rec_v_dmt_upf_s_d_5",
+    "dmr_rec_v_dmt_upf_s_d_50",
+    "dmr_rec_v_dmt_upf_s_d_51",
+    "dmr_rec_v_dmt_upf_s_d_52",
+    "dmr_rec_v_dmt_upf_s_d_53",
+    "dmr_rec_v_dmt_upf_s_d_55",
+    "dmr_rec_v_dmt_upf_s_d_8",
+    "dmr_rec_v_dmt_upf_s_d_9",
+    "dmr_rec_v_dmt_upf_s_m_56"
+  )
+
   def forTest(): DataFrame = {
-    val tables = List(
-      //"dmr_rec_s_user_order_amount_one_month",
-      "dmr_rec_s_user_order_amount_one_month_new",
-      "dmr_rec_v_dmt_upf_s_d_0000017",
-      "dmr_rec_v_dmt_upf_s_d_0000030",
-      "dmr_rec_v_dmt_upf_s_d_0000034",
-      "dmr_rec_v_dmt_upf_s_d_0000035",
-      "dmr_rec_v_dmt_upf_s_d_0000056",
-
-      "dmr_rec_v_dmt_upf_s_d_1",
-      "dmr_rec_v_dmt_upf_s_d_10",
-      "dmr_rec_v_dmt_upf_s_d_2",
-      "dmr_rec_v_dmt_upf_s_d_21",
-      "dmr_rec_v_dmt_upf_s_d_3",
-      "dmr_rec_v_dmt_upf_s_d_34",
-
-      "dmr_rec_v_dmt_upf_s_d_4",
-      "dmr_rec_v_dmt_upf_s_d_42",
-      "dmr_rec_v_dmt_upf_s_d_44",
-      "dmr_rec_v_dmt_upf_s_d_45",
-      "dmr_rec_v_dmt_upf_s_d_47",
-      "dmr_rec_v_dmt_upf_s_d_48",
-
-      "dmr_rec_v_dmt_upf_s_d_5",
-      "dmr_rec_v_dmt_upf_s_d_50",
-      "dmr_rec_v_dmt_upf_s_d_51",
-      "dmr_rec_v_dmt_upf_s_d_52",
-      "dmr_rec_v_dmt_upf_s_d_53",
-      "dmr_rec_v_dmt_upf_s_d_55",
-      "dmr_rec_v_dmt_upf_s_d_8",
-      "dmr_rec_v_dmt_upf_s_d_9",
-      "dmr_rec_v_dmt_upf_s_m_56"
-    )
-    var joinedData = sqlContext.sql(s"select * from hyzs.${tables(0)}")
-    for(tableName <- tables.drop(1)){
+    var joinedData = sqlContext.sql(s"select * from hyzs.${testTables(0)}")
+    for(tableName <- testTables.drop(1)){
       val table = sqlContext.sql(s"select * from hyzs.$tableName")
       joinedData = joinedData.join(table, Seq(key), "left_outer")
     }
@@ -242,14 +241,15 @@ object JDDataProcess {
 
   }
 
+  def labelTraining(): Unit = {
+    generateClassLabelAndData("/hyzs/files/pin7labels.txt")
+
+  }
+
   def main(args: Array[String]): Unit = {
     // import txt to DataFrame
     sqlContext.sql("create database IF NOT EXISTS hyzs ")
 
-/*    if(args(0) == "test"){
-      joinedData = forTest()
-    }
-*/
     val data = sc.getConf.get("spark.processJob.dataPath")
     val header = sc.getConf.get("spark.processJob.headerPath")
     val tableStr = sc.getConf.get("spark.processJob.fileNames")
@@ -257,16 +257,22 @@ object JDDataProcess {
     // check and filter if file exists
     val validTables = tables.filter(
       tableName => checkHDFileExist(s"$header$tableName.txt") && checkHDFileExist(s"$data$tableName.txt"))
-
-    for(tableName <- validTables){
-      val headerPath=s"$header$tableName.txt"
-      val dataPath=s"$data$tableName.txt"
-      val table = createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath)
-      saveTable(table, tableName)
+    if(args.length>0 && args(0) == "no_import"){
+      println("skip import")
+    } else {
+      for(tableName <- validTables){
+        val headerPath=s"$header$tableName.txt"
+        val dataPath=s"$data$tableName.txt"
+        val table = createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath)
+        //   .repartition(col(key))
+        saveTable(table, tableName)
+      }
     }
 
     // process business table, res start with hisTable
     var joinedData = processHis(validTables(0))
+    //  .repartition(col(key))
+    joinedData.cache()
     // big table join process
     for(tableName <- validTables.drop(1)){
       val table = sqlContext.sql(s"select * from hyzs.$tableName")
