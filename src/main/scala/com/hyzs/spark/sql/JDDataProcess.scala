@@ -11,6 +11,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.hive._
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
+import org.apache.spark.storage.StorageLevel
 
 object JDDataProcess {
   val conf = new SparkConf().setAppName("DataProcess")
@@ -283,13 +284,17 @@ object JDDataProcess {
 
     var result = sqlContext.sql(s"select * from hyzs.${validTables(0)}")
       .sample(withReplacement=false, sampleRatio.toDouble)
-    val ids = result.select(key)
+      .repartition(col(key))
+//    val ids = result.select(key)
+    //    ids.cache()
     // big table join process
     for(tableName <- validTables.drop(1)) {
       val table = sqlContext.sql(s"select * from hyzs.$tableName")
-      val joinedData = ids.join(table, Seq(key), "left_outer")
-        .dropDuplicates(Seq(key))
-      result = result.join(joinedData, Seq(key), "left_outer")
+        .repartition(col(key))
+//      val joinedData = ids.join(table, Seq(key), "left_outer")
+//        .dropDuplicates(Seq(key))
+      result = result.join(table, Seq(key), "left_outer")
+        .persist(StorageLevel.MEMORY_AND_DISK)
     }
     // process NA values, save all_data table
     //val allData = processEmpty(result)

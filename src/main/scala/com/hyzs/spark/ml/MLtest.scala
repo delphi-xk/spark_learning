@@ -85,11 +85,10 @@ object MLtest {
     val cols = df.columns.drop(1)
     val indexerArray = cols
       .map(col => getIndexers(df, col))
-    val stageBuffer = new ArrayBuffer[PipelineStage]()
-    stageBuffer.appendAll(indexerArray.map(_._2))
     val pipeline = new Pipeline()
       .setStages(Array(indexerArray.map(_._2): _*))
       .fit(df)
+    val transformed = pipeline.transform(df)
 
   }
 
