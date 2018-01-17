@@ -78,12 +78,10 @@ object JDDataProcess {
     createDFfromRawCsv(fields, dataPath, dataSplitter)
   }
 
-  def processHis(hisTable: String): DataFrame = {
-    val df1 = sqlContext.sql(s"select * from hyzs.$hisTable")
-    val swp = df1
-      .groupBy(key).agg(count(key).as("count_id"), avg("user_payable_pay_amount").as("avg_pay_amount"))
+  def processHis(df: DataFrame): DataFrame = {
+    df.groupBy(key)
+      .agg(count(key).as("count_id"), avg("user_payable_pay_amount").as("avg_pay_amount"))
       .selectExpr(key, "cast (count_id as string) count_id", "cast (avg_pay_amount as string) avg_pay_amount")
-    swp
   }
 
   // ensure countCols can be counted(cast double)
@@ -257,6 +255,7 @@ object JDDataProcess {
     val data = sc.getConf.get("spark.processJob.dataPath")
     val header = sc.getConf.get("spark.processJob.headerPath")
     val tableStr = sc.getConf.get("spark.processJob.fileNames")
+    val sampleRatio = sc.getConf.get("spark.processJob.SampleRatio")
     val tables = tableStr.split(",")
     // check and filter if file exists
     val validTables = tables.filter(
@@ -264,7 +263,11 @@ object JDDataProcess {
 
     if(args.length >0 && args(0) == "import_business") {
       // process business table, result start with hisTable
-      val hisTable = processNull(processHis(validTables(0)))
+      val tableName = validTables(0)
+      val headerPath=s"$header$tableName.txt"
+      val dataPath=s"$data$tableName.txt"
+      val hisData = createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath)
+      val hisTable = processNull(processHis(hisData))
       saveTable(hisTable, validTables(0))
     }
 
@@ -279,11 +282,14 @@ object JDDataProcess {
     }
 
     var result = sqlContext.sql(s"select * from hyzs.${validTables(0)}")
+      .sample(withReplacement=false, sampleRatio.toDouble)
+    val ids = result.select(key)
     // big table join process
     for(tableName <- validTables.drop(1)) {
       val table = sqlContext.sql(s"select * from hyzs.$tableName")
+      val joinedData = ids.join(table, Seq(key), "left_outer")
         .dropDuplicates(Seq(key))
-      result = result.join(table, Seq(key), "left_outer")
+      result = result.join(joinedData, Seq(key), "left_outer")
     }
     // process NA values, save all_data table
     //val allData = processEmpty(result)

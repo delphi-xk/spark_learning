@@ -2,7 +2,7 @@ package com.hyzs.spark.ml
 
 
 
-import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.feature.{IndexToString, StringIndexer, StringIndexerModel}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
@@ -85,8 +85,8 @@ object MLtest {
     val cols = df.columns.drop(1)
     val indexerArray = cols
       .map(col => getIndexers(df, col))
-/*    val stageBuffer = new ArrayBuffer
-    stageBuffer.appendAll(indexerArray.map(_._2))*/
+    val stageBuffer = new ArrayBuffer[PipelineStage]()
+    stageBuffer.appendAll(indexerArray.map(_._2))
     val pipeline = new Pipeline()
       .setStages(Array(indexerArray.map(_._2): _*))
       .fit(df)
