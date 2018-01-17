@@ -343,6 +343,15 @@ object ScalaTest {
   }
 
 
+  def testArgs(): Unit ={
+    val args = Array("import1", "importXXX")
+    if(args.length >0 && args(0) == "import1"){
+      println(args(0))
+    }
+    if(args.length >1 && args(1) == "import2"){
+      println(args(1))
+    }
+  }
 
   def main(args: Array[String]) {
     //println(returnTransMap)
@@ -361,7 +370,7 @@ object ScalaTest {
 //    println(listToString(li))
 
     //iterMap()
-
+    testArgs
 
 
   }

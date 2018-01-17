@@ -148,10 +148,15 @@ object JDDataProcess {
     dataFrame.selectExpr(newCols: _*)
   }
 
-  def processNA(df: DataFrame): DataFrame = {
+  def processEmpty(df: DataFrame): DataFrame = {
     df.na.fill("\\N")
-      .na.replace("*", Map("null" -> "\\N", "NULL" -> "\\N", "-9999" -> "\\N"))
+      .na.replace("*", Map("" -> "\\N","null" -> "\\N", "NULL" -> "\\N"))
    //   .dropDuplicates(Seq(key))
+  }
+
+  def processNull(df: DataFrame): DataFrame = {
+    df.na.fill("")
+      .na.replace("*", Map("null" -> "", "NULL" -> "", "-9999" -> ""))
   }
 
   val testTables = List(
@@ -199,7 +204,6 @@ object JDDataProcess {
 
   // generate label table and split data
   def trainModelData(allData: DataFrame): Unit = {
-
     val labelProcessMap = Map(
       "m1" ->
         (Array("jdmall_ordr_f0116", "jdmall_user_p0001"), Array(0.5, 0.5)),
@@ -257,39 +261,40 @@ object JDDataProcess {
     // check and filter if file exists
     val validTables = tables.filter(
       tableName => checkHDFileExist(s"$header$tableName.txt") && checkHDFileExist(s"$data$tableName.txt"))
-    if(args.length>0 && args(0) == "no_import"){
-      println("skip import")
-    } else {
-      for(tableName <- validTables){
+
+    if(args.length >0 && args(0) == "import_business") {
+      // process business table, result start with hisTable
+      val hisTable = processNull(processHis(validTables(0)))
+      saveTable(hisTable, validTables(0))
+    }
+
+    if(args.length > 1 && args(1) == "import_info") {
+      for(tableName <- validTables.drop(1)){
         val headerPath=s"$header$tableName.txt"
         val dataPath=s"$data$tableName.txt"
-        val table = createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath)
+        val table = processNull(createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath))
         //   .repartition(col(key))
         saveTable(table, tableName)
       }
     }
 
-    // process business table, res start with hisTable
-    var joinedData = processHis(validTables(0))
-    //  .repartition(col(key))
-    joinedData.cache()
+    var result = sqlContext.sql(s"select * from hyzs.${validTables(0)}")
     // big table join process
-    for(tableName <- validTables.drop(1)){
+    for(tableName <- validTables.drop(1)) {
       val table = sqlContext.sql(s"select * from hyzs.$tableName")
-      joinedData = joinedData.join(table, Seq(key), "left_outer")
+        .dropDuplicates(Seq(key))
+      result = result.join(table, Seq(key), "left_outer")
     }
-
     // process NA values, save all_data table
-    val allData = processNA(joinedData)
-    saveTable(allData, "all_data")
+    //val allData = processEmpty(result)
+    saveTable(result, "all_data")
     // if only for prediction, not need to split data or generate label table
-    if (args.length>0 && args(0) == "predict"){
-      predictModelData(allData)
+    if (args.length>1 && args(1) == "predict"){
+      predictModelData(result)
     } else {
-      trainModelData(allData)
+      trainModelData(result)
     }
 
   }
-
 
 }
