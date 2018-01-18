@@ -43,6 +43,7 @@ object JDDataProcess {
     sqlContext.sql(s"drop table if exists hyzs.$tableName")
     val path = s"$warehouseDir$tableName"
     if(checkHDFileExist(path))dropHDFiles(path)
+    println("xkqyj going to save")
     df.write
       .option("path",path)
       .saveAsTable(s"hyzs.$tableName")
@@ -257,6 +258,8 @@ object JDDataProcess {
     val header = sc.getConf.get("spark.processJob.headerPath")
     val tableStr = sc.getConf.get("spark.processJob.fileNames")
     val sampleRatio = sc.getConf.get("spark.processJob.SampleRatio")
+    //val dropFlag = sc.getConf.get("spark.processJob.DropFlag")
+    //val actionStage = sc.getConf.get("spark.processJob.ActionStage")
     val tables = tableStr.split(",")
     // check and filter if file exists
     val validTables = tables.filter(
@@ -282,19 +285,20 @@ object JDDataProcess {
       }
     }
 
+    // big table join process
     var result = sqlContext.sql(s"select * from hyzs.${validTables(0)}")
       .sample(withReplacement=false, sampleRatio.toDouble)
-      .repartition(col(key))
-//    val ids = result.select(key)
-    //    ids.cache()
-    // big table join process
+
+    // .cache()
+    // .repartition(col(key))
+    //  .persist(StorageLevel.MEMORY_AND_DISK)
     for(tableName <- validTables.drop(1)) {
       val table = sqlContext.sql(s"select * from hyzs.$tableName")
-        .repartition(col(key))
-//      val joinedData = ids.join(table, Seq(key), "left_outer")
-//        .dropDuplicates(Seq(key))
       result = result.join(table, Seq(key), "left_outer")
-        .persist(StorageLevel.MEMORY_AND_DISK)
+        .repartition(partitionNums, col(key))
+        .persist()
+      println(s"xkqyj $tableName count num: ${result.count()}")
+      //  .dropDuplicates(Seq(key))
     }
     // process NA values, save all_data table
     //val allData = processEmpty(result)
