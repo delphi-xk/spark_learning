@@ -43,7 +43,7 @@ object JDDataProcess {
     sqlContext.sql(s"drop table if exists hyzs.$tableName")
     val path = s"$warehouseDir$tableName"
     if(checkHDFileExist(path))dropHDFiles(path)
-    println("xkqyj going to save")
+    //println("xkqyj going to save")
     df.write
       .option("path",path)
       .saveAsTable(s"hyzs.$tableName")
@@ -250,6 +250,18 @@ object JDDataProcess {
 
   }
 
+  def joinTableProcess(oldResult: DataFrame, tableName: String): DataFrame ={
+    val newTable = sqlContext.sql(s"select * from hyzs.$tableName")
+    val newResult = oldResult.join(newTable, Seq(key), "left_outer")
+      .repartition(partitionNums, col(key))
+      .persist(StorageLevel.MEMORY_AND_DISK)
+    newResult.first()
+    println(s"xkqyj joined table: $tableName ")
+    // unpersist after action
+    oldResult.unpersist()
+    newResult
+  }
+
   def main(args: Array[String]): Unit = {
     // import txt to DataFrame
     sqlContext.sql("create database IF NOT EXISTS hyzs ")
@@ -272,6 +284,7 @@ object JDDataProcess {
       val dataPath=s"$data$tableName.txt"
       val hisData = createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath)
       val hisTable = processNull(processHis(hisData))
+        .repartition(numPartitions = partitionNums, col(key))
       saveTable(hisTable, validTables(0))
     }
 
@@ -280,7 +293,7 @@ object JDDataProcess {
         val headerPath=s"$header$tableName.txt"
         val dataPath=s"$data$tableName.txt"
         val table = processNull(createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath))
-        //   .repartition(col(key))
+           .repartition(numPartitions = partitionNums, col(key))
         saveTable(table, tableName)
       }
     }
@@ -293,11 +306,7 @@ object JDDataProcess {
     // .repartition(col(key))
     //  .persist(StorageLevel.MEMORY_AND_DISK)
     for(tableName <- validTables.drop(1)) {
-      val table = sqlContext.sql(s"select * from hyzs.$tableName")
-      result = result.join(table, Seq(key), "left_outer")
-        .repartition(partitionNums, col(key))
-        .persist()
-      println(s"xkqyj $tableName count num: ${result.count()}")
+      result = joinTableProcess(result, tableName)
       //  .dropDuplicates(Seq(key))
     }
     // process NA values, save all_data table

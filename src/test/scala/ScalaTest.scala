@@ -1,5 +1,6 @@
 //import scala.collection.JavaConversions._
 import java.io._
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 
@@ -353,6 +354,17 @@ object ScalaTest {
     }
   }
 
+  def testHash(): Unit ={
+    val s1 = "!^@%&*^!@$!*@,><OKOD()===asdfzxc"
+    val s2 = "!^@%&*^!@$!*@,><OKOD()===asdf"
+    val s3 = "向坤"
+    println(s"s1: ${s1.hashCode} , ${s1.hashCode % 2500 % 15}")
+    println(s"s2: ${s2.hashCode}, ${s2.hashCode % 2500 % 15}")
+    println(s"s3: ${s3.hashCode}, ${s3.hashCode % 2500 % 15}")
+    val digest = MessageDigest.getInstance("md5")
+
+  }
+
   def main(args: Array[String]) {
     //println(returnTransMap)
     //test5()
@@ -370,7 +382,7 @@ object ScalaTest {
 //    println(listToString(li))
 
     //iterMap()
-    testArgs
+    testHash
 
 
   }
