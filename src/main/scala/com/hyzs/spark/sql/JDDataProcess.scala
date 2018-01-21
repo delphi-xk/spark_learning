@@ -96,8 +96,7 @@ object JDDataProcess {
     if( countCols.length == weight.length){
       val allData = sqlContext.sql("select * from hyzs.all_data")
       val selectCols = countCols.map( col => s"cast ($col as double) $col")
-      val label_data = allData
-        .na.replace(countCols.toSeq, Map("\\N" -> "0.01"))
+      val label_data = processEmpty(allData, countCols)
         .selectExpr(key +: selectCols : _*)
 
       // vector assembling
@@ -148,9 +147,10 @@ object JDDataProcess {
     dataFrame.selectExpr(newCols: _*)
   }
 
-  def processEmpty(df: DataFrame): DataFrame = {
-    df.na.fill("\\N")
-      .na.replace("*", Map("" -> "\\N","null" -> "\\N", "NULL" -> "\\N"))
+  // process empty value for label generation
+  def processEmpty(df: DataFrame, cols: Seq[String]): DataFrame = {
+    df.na.fill("0.0")
+      .na.replace(cols, Map("" -> "0.0","null" -> "0.0", "NULL" -> "0.0"))
    //   .dropDuplicates(Seq(key))
   }
 
