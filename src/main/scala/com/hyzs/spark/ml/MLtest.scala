@@ -3,10 +3,11 @@ package com.hyzs.spark.ml
 
 
 import org.apache.spark.ml.{Pipeline, PipelineStage}
-import org.apache.spark.ml.feature.{IndexToString, StringIndexer, StringIndexerModel}
+import org.apache.spark.ml.feature.{IndexToString, StringIndexer, StringIndexerModel, VectorAssembler}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql._
@@ -87,8 +88,28 @@ object MLtest {
       .map(col => getIndexers(df, col))
     val pipeline = new Pipeline()
       .setStages(Array(indexerArray.map(_._2): _*))
-      .fit(df)
-    val transformed = pipeline.transform(df)
+    val model1 = pipeline.fit(df)
+    val transformed = model1.transform(df)
+
+    //transformed.columns.filter(str => str.matches("\\S+_indexer"))
+    val indexerCols = transformed.columns.filter(str => str.endsWith("_indexer"))
+
+    val assembler = new VectorAssembler()
+      .setInputCols(indexerCols)
+      .setOutputCol("features")
+
+    val pipeline2 = new Pipeline().setStages(Array(assembler))
+    val model2 = pipeline2.fit(transformed)
+    val res = model2.transform(transformed).selectExpr("client_no" +: indexerCols :+ "features": _*)
+
+    val labeledFunc: (Vector => LabeledPoint) = (vector: Vector) =>{
+      LabeledPoint(0.0, vector)
+    }
+    val labeledUdf = udf(labeledFunc)
+    res.withColumn("labeled_point", labeledUdf(col("features")))
+
+
+
 
   }
 

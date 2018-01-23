@@ -354,15 +354,27 @@ object ScalaTest {
     }
   }
 
+  def getMd5(str: String): String = {
+    MessageDigest.getInstance("MD5")
+      .digest(str.getBytes)
+      .map("%02X".format(_)).mkString
+  }
+
   def testHash(): Unit ={
-    val s1 = "!^@%&*^!@$!*@,><OKOD()===asdfzxc"
-    val s2 = "!^@%&*^!@$!*@,><OKOD()===asdf"
+    val s1 = "jdjob1234568"
+    val s2 = "jdjob1234567"
     val s3 = "向坤"
+    val s4 = "asdfqw@!*&%*&#)(*!@&()#*!)!@<><?:"
+    val s5 = "asdfqw@!*&%*&#)(*!@&()#*!)!@<><?:"
     println(s"s1: ${s1.hashCode} , ${s1.hashCode % 2500 % 15}")
     println(s"s2: ${s2.hashCode}, ${s2.hashCode % 2500 % 15}")
     println(s"s3: ${s3.hashCode}, ${s3.hashCode % 2500 % 15}")
-    val digest = MessageDigest.getInstance("md5")
 
+    println(getMd5(s1))
+    println(getMd5(s2))
+    println(getMd5(s3))
+    println(getMd5(s4))
+    println(getMd5(s5))
   }
 
   def main(args: Array[String]) {

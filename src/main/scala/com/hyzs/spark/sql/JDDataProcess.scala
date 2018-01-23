@@ -4,6 +4,8 @@ package com.hyzs.spark.sql
   * Created by XIANGKUN on 2018/1/9.
   */
 
+import java.security.MessageDigest
+
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -22,12 +24,14 @@ object JDDataProcess {
   val partitionNums = sqlContext.getConf("spark.sql.shuffle.partitions").toInt
   //  val allConf = conf.getAll
 //  val hiveDir = allConf.filter(param => param._1 == "hive.metastore.warehouse.dir")
-  val warehouseDir = "/hyzs/warehouse/hyzs.db/"
-  //val hiveWareDir = "/user/hive/warehouse/"
+//sqlContext.setConf("spark.sql.shuffle.partitions", "2048")
+//val hiveWareDir = "/user/hive/warehouse/"
 
+  val warehouseDir = "/hyzs/warehouse/hyzs.db/"
   import sqlContext.implicits._
-  //sqlContext.setConf("spark.sql.shuffle.partitions", "2048")
-  val key = "user_id"
+
+  val originalKey = "user_id"
+  val key = "user_pin"
 
   def checkHDFileExist(filePath: String): Boolean = {
     val path = new Path(filePath)
@@ -39,12 +43,21 @@ object JDDataProcess {
     fs.delete(path, true)
   }
 
+  val getMd5: (String =>String) = (str:String) => {
+    MessageDigest.getInstance("MD5")
+      .digest(str.getBytes)
+      .map("%02X".format(_)).mkString
+  }
+  sqlContext.udf.register("md5", getMd5)
+  val md5Udf = udf(getMd5)
+
   def saveTable(df: DataFrame, tableName:String): Unit = {
     sqlContext.sql(s"drop table if exists hyzs.$tableName")
     val path = s"$warehouseDir$tableName"
     if(checkHDFileExist(path))dropHDFiles(path)
     //println("xkqyj going to save")
-    df.write
+    df.dropDuplicates(Seq(key))
+      .write
       .option("path",path)
       .saveAsTable(s"hyzs.$tableName")
   }
@@ -81,9 +94,12 @@ object JDDataProcess {
   }
 
   def processHis(df: DataFrame): DataFrame = {
-    df.groupBy(key)
+    df.withColumn(key, md5Udf(col(originalKey)))
+      .groupBy(key)
       .agg(count(key).as("count_id"), avg("user_payable_pay_amount").as("avg_pay_amount"))
-      .selectExpr(key, "cast (count_id as string) count_id", "cast (avg_pay_amount as string) avg_pay_amount")
+      .selectExpr(key,
+        "cast (count_id as string) count_id",
+        "cast (avg_pay_amount as string) avg_pay_amount")
   }
 
   // ensure countCols can be counted(cast double)
@@ -117,7 +133,7 @@ object JDDataProcess {
       }
       val multiplyUdf = udf(multiplyFunc)
       val userLabel = scaledData.withColumn("label", multiplyUdf(col("scaled_feature")))
-        .select("user_id", "label")
+        .select(key, "label")
       userLabel
     } else {
       throw new Exception("cols and weight length should be equal!")
@@ -125,7 +141,7 @@ object JDDataProcess {
   }
 
   // import pin7labels.txt, generate label and data for class training
-  def generateClassLabelAndData(labelFilePath: String): Unit = {
+/*  def generateClassLabelAndData(labelFilePath: String): Unit = {
     val allLabels = createDFfromRawCsv(Array("phone", "label", "user_id"), labelFilePath, "\\t")
     saveTable(allLabels, "pin_all_labels")
     val tasks = Array("c1", "c2", "c3", "c4", "c5", "c6", "c7")
@@ -140,6 +156,12 @@ object JDDataProcess {
     saveTable(classData, "class_data")
 
   }
+
+  def labelTraining(): Unit = {
+    generateClassLabelAndData("/hyzs/files/pin7labels.txt")
+
+  }
+  */
 
   // ensure dataFrame.columns contains filterCols
   def dataGenerateProcess(dataFrame: DataFrame, filterCols:Array[String]): DataFrame = {
@@ -245,25 +267,22 @@ object JDDataProcess {
 
   }
 
-  def labelTraining(): Unit = {
-    generateClassLabelAndData("/hyzs/files/pin7labels.txt")
-
-  }
 
   def joinTableProcess(oldResult: DataFrame, tableName: String): DataFrame ={
     val newTable = sqlContext.sql(s"select * from hyzs.$tableName")
     val newResult = oldResult.join(newTable, Seq(key), "left_outer")
+      .dropDuplicates(Seq(key))
       .repartition(partitionNums, col(key))
       .persist(StorageLevel.MEMORY_AND_DISK)
     newResult.first()
-    println(s"xkqyj joined table: $tableName ")
+    println(s"xkqyj joined table: $tableName, ${newResult.rdd.partitions.size}")
     // unpersist after action
     oldResult.unpersist()
     newResult
   }
 
   def main(args: Array[String]): Unit = {
-    // import txt to DataFrame
+
     sqlContext.sql("create database IF NOT EXISTS hyzs ")
 
     val data = sc.getConf.get("spark.processJob.dataPath")
@@ -293,6 +312,8 @@ object JDDataProcess {
         val headerPath=s"$header$tableName.txt"
         val dataPath=s"$data$tableName.txt"
         val table = processNull(createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath))
+            .withColumn(key, md5Udf(col(originalKey)))
+            .drop(originalKey)
            .repartition(numPartitions = partitionNums, col(key))
         saveTable(table, tableName)
       }
@@ -300,14 +321,15 @@ object JDDataProcess {
 
     // big table join process
     var result = sqlContext.sql(s"select * from hyzs.${validTables(0)}")
-      .sample(withReplacement=false, sampleRatio.toDouble)
-
+    //  .sample(withReplacement=false, sampleRatio.toDouble)
+      .repartition(numPartitions = partitionNums)
+    println("")
     // .cache()
     // .repartition(col(key))
     //  .persist(StorageLevel.MEMORY_AND_DISK)
     for(tableName <- validTables.drop(1)) {
       result = joinTableProcess(result, tableName)
-      //  .dropDuplicates(Seq(key))
+       // .dropDuplicates(Seq(key))
     }
     // process NA values, save all_data table
     //val allData = processEmpty(result)
