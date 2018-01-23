@@ -8,6 +8,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql._
@@ -101,13 +102,13 @@ object MLtest {
     val pipeline2 = new Pipeline().setStages(Array(assembler))
     val model2 = pipeline2.fit(transformed)
     val res = model2.transform(transformed).selectExpr("client_no" +: indexerCols :+ "features": _*)
-
     val labeledFunc: (Vector => LabeledPoint) = (vector: Vector) =>{
       LabeledPoint(0.0, vector)
     }
-    val labeledUdf = udf(labeledFunc)
-    res.withColumn("labeled_point", labeledUdf(col("features")))
 
+    val labelData = res.select("features").rdd.map{ x: Row => x.getAs[Vector](0)}.map(labeledFunc)
+
+    MLUtils.saveAsLibSVMFile(labelData.coalesce(1), "/hyzs/data/test_libsvm")
 
 
 
