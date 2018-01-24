@@ -30,12 +30,8 @@ object ScalaTest {
     if(newValue>privateAge) privateAge = newValue
   }
 
-
   val summary: Properties = PropertyUtils.getProperty("summary-bak.properties")
 
-
-
-  @Test
   def test(): Unit = {
 /*    val business = PropertyUtils.business
     for ( (k,v) <- business){
@@ -375,6 +371,14 @@ object ScalaTest {
     println(getMd5(s3))
     println(getMd5(s4))
     println(getMd5(s5))
+  }
+
+  def generateTestData: Unit ={
+    val filePath = "d:/workspace/testdata"
+
+    val bufferedWriter = new BufferedWriter(new FileWriter(new File(filePath)))
+
+
   }
 
   def main(args: Array[String]) {
