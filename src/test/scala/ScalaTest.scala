@@ -389,6 +389,8 @@ object ScalaTest {
     println(feas.length)
     println(header.split(",").length)
     println((arrs(0) +: arrs(1) +: feas).length)
+
+    val cols = Range(0,5)
   }
 
   def main(args: Array[String]) {
