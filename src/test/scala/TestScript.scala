@@ -51,9 +51,28 @@ val labelData = res5.select("features").rdd.map{ x: Row => x.getAs[Vector](0)}.m
 
  res5.first().map{ row => row.getSeq[Double]}
 
+
  val cols = (1 to 15).map(i => "col_"+i).map(col => StructField(col, StringType))
- val arr = Array("a,,,b,cc,,,d,,,e,,,,", "A,,,B,CC,,,D,,,E,,,,")
+ val arrs = Array("t1\tt2\ta,,,b,cc,,,d,,,e,,,,", "T1\tT2\tA,,,B,CC,,,,,,E,,F")
  val rdd = sc.makeRDD(arr)
- val data = rdd.map(row => row.split(",", -1)).map(fields => Row(fields: _*))
+ val data = rdd.map( (row:String) => {
+  val arr = row.split("\\t", -1)
+  val res = arr(0) +: arr(1) +: arr(2).split(",", -1)
+  res
+}).map(fields => Row(fields: _*))
  val struct = StructType(cols)
  val table = sqlContext.createDataFrame(data, struct)
+
+
+val cols = (1 to 245).map(i => "col_"+i).map(col => StructField(col, StringType))
+
+val header = sc.textFile("/hyzs/test/fea.header").first().split(",").map(col => StructField(col, StringType))
+val dataFile = sc.textFile("/hyzs/test/feature_data.txt")
+val data = dataFile.map( (row:String) => { 
+    val arr = row.split("\\t", -1)
+    arr(0) +: arr(1) +: arr(2).split(",", -1)
+  })
+  .filter( arr => arr.length <= header.length)
+  .map(fields => Row(fields: _*))
+val struct = StructType(header)
+val table = sqlContext.createDataFrame(rddData, struct)
