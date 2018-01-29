@@ -4,27 +4,34 @@ package com.hyzs.spark.sql
   * Created by XIANGKUN on 2018/1/9.
   */
 
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.ml.feature.{MinMaxScaler, VectorAssembler}
-import org.apache.spark.mllib.linalg.{Matrices, Vector}
-import org.apache.spark.sql._
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive._
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import java.security.MessageDigest
+
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql._
+import org.apache.spark.sql.hive._
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
+import org.apache.spark.storage.StorageLevel
 
-object JDDataProcess {
-
+object JDDataProcess_v1 {
   val conf = new SparkConf().setAppName("DataProcess")
   val sc = new SparkContext(conf)
   val sqlContext = new HiveContext(sc)
   val hdConf = sc.hadoopConfiguration
   val fs = FileSystem.get(hdConf)
   val partitionNums = sqlContext.getConf("spark.sql.shuffle.partitions").toInt
+  //  val allConf = conf.getAll
+//  val hiveDir = allConf.filter(param => param._1 == "hive.metastore.warehouse.dir")
+//sqlContext.setConf("spark.sql.shuffle.partitions", "2048")
+//val hiveWareDir = "/user/hive/warehouse/"
+
   val warehouseDir = "/hyzs/warehouse/hyzs.db/"
+  import sqlContext.implicits._
 
   val originalKey = "user_id"
-  val key = "user_id_md5"
+  val key = "user_pin"
 
   def checkHDFileExist(filePath: String): Boolean = {
     val path = new Path(filePath)
@@ -36,10 +43,19 @@ object JDDataProcess {
     fs.delete(path, true)
   }
 
+  val getMd5: (String =>String) = (str:String) => {
+    MessageDigest.getInstance("MD5")
+      .digest(str.getBytes)
+      .map("%02X".format(_)).mkString
+  }
+  sqlContext.udf.register("md5", getMd5)
+  val md5Udf = udf(getMd5)
+
   def saveTable(df: DataFrame, tableName:String): Unit = {
     sqlContext.sql(s"drop table if exists hyzs.$tableName")
     val path = s"$warehouseDir$tableName"
     if(checkHDFileExist(path))dropHDFiles(path)
+    //println("xkqyj going to save")
     df.dropDuplicates(Seq(key))
       .write
       .option("path",path)
@@ -51,7 +67,7 @@ object JDDataProcess {
     val header = data.first()
     val content = data.filter( line => line != header)
     val cols = header.split(delimiter).map( col => StructField(col, StringType))
-    val rows = content.map( lines => lines.split(delimiter, -1))
+    val rows = content.map( lines => lines.split(delimiter))
       .filter(row => row.length == cols.length)
       .map(fields => Row(fields: _*))
     val struct = StructType(cols)
@@ -60,10 +76,10 @@ object JDDataProcess {
 
   // filter malformed data
   def createDFfromRawCsv(header: Array[String], path: String, delimiter: String = ","): DataFrame = {
-    val data = sc.textFile(path)
+    val data = sc.textFile(path, partitionNums)
     val cols = header.map( col => StructField(col, StringType))
-    val rows = data.map( lines => lines.split(delimiter, -1))
-        .filter(row => row.length == cols.length)
+    val rows = data.map( lines => lines.split(delimiter))
+        .filter(row => row.length <= cols.length)
         .map(fields => Row(fields: _*))
       val struct = StructType(cols)
       sqlContext.createDataFrame(rows, struct)
@@ -77,34 +93,22 @@ object JDDataProcess {
     createDFfromRawCsv(fields, dataPath, dataSplitter)
   }
 
-  def createDFfromBadFile(headerPath: String, dataPath: String,
-                          headerSplitter: String=",", dataSplitter: String="\\t"): DataFrame = {
-    val headerFile = sc.textFile(headerPath)
-    val dataFile = sc.textFile(dataPath)
-    val header = headerFile.first().split(headerSplitter)
-          .map( col => StructField(col, StringType))
-    val rows = dataFile.map( (row:String) => {
-        val arrs = row.split("\\t", -1)
-        arrs(0) +: arrs(1) +: arrs(2).split(",",-1)
-    }).filter( arr => arr.length <= header.length)
-      .map(fields => Row(fields: _*))
-    val struct = StructType(header)
-    sqlContext.createDataFrame(rows, struct)
-  }
-
   def processHis(df: DataFrame): DataFrame = {
-    df.groupBy(key, originalKey)
-      .agg(count(key).as("count_id"),
-        avg("before_prefr_amount").as("avg_prefr_amount"),
-        avg("user_payable_pay_amount").as("avg_pay_amount"))
-      .selectExpr(key, originalKey,
+    df.withColumn(key, md5Udf(col(originalKey)))
+      .groupBy(key)
+      .agg(count(key).as("count_id"), avg("user_payable_pay_amount").as("avg_pay_amount"))
+      .selectExpr(key,
         "cast (count_id as string) count_id",
-        "cast (avg_prefr_amount as string) avg_prefr_amount",
         "cast (avg_pay_amount as string) avg_pay_amount")
   }
 
   // ensure countCols can be counted(cast double)
   def labelGenerateProcess(taskName:String, countCols: Array[String], weight: Array[Double]): DataFrame = {
+    import org.apache.spark.ml.feature.VectorAssembler
+    import org.apache.spark.ml.feature.MinMaxScaler
+    import org.apache.spark.mllib.linalg.{Vector, Vectors}
+    import org.apache.spark.mllib.linalg.Matrices
+
     if( countCols.length == weight.length){
       val allData = sqlContext.sql("select * from hyzs.all_data")
       val selectCols = countCols.map( col => s"cast ($col as double) $col")
@@ -136,6 +140,29 @@ object JDDataProcess {
     }
   }
 
+  // import pin7labels.txt, generate label and data for class training
+/*  def generateClassLabelAndData(labelFilePath: String): Unit = {
+    val allLabels = createDFfromRawCsv(Array("phone", "label", "user_id"), labelFilePath, "\\t")
+    saveTable(allLabels, "pin_all_labels")
+    val tasks = Array("c1", "c2", "c3", "c4", "c5", "c6", "c7")
+    for(index <- 1 to 7){
+      val classLabel = allLabels.select(
+        $"user_id",
+        when($"label" === s"$index","1").otherwise("0").as("label")
+      )
+      saveTable(classLabel, s"${tasks(index-1)}_label")
+    }
+    val classData = sqlContext.sql("select b.* from hyzs.pin_all_labels a, hyzs.all_data b where a.user_id = b.user_id ")
+    saveTable(classData, "class_data")
+
+  }
+
+  def labelTraining(): Unit = {
+    generateClassLabelAndData("/hyzs/files/pin7labels.txt")
+
+  }
+  */
+
   // ensure dataFrame.columns contains filterCols
   def dataGenerateProcess(dataFrame: DataFrame, filterCols:Array[String]): DataFrame = {
     val newCols = dataFrame.columns diff filterCols
@@ -150,8 +177,51 @@ object JDDataProcess {
   }
 
   def processNull(df: DataFrame): DataFrame = {
-    df.na.fill("0")
-      .na.replace("*", Map("null" -> "0", "NULL" -> "0", "-9999" -> "0"))
+    df.na.fill("")
+      .na.replace("*", Map("null" -> "", "NULL" -> "", "-9999" -> ""))
+  }
+
+  val testTables = List(
+    //"dmr_rec_s_user_order_amount_one_month",
+    "dmr_rec_s_user_order_amount_one_month_new",
+    "dmr_rec_v_dmt_upf_s_d_0000017",
+    "dmr_rec_v_dmt_upf_s_d_0000030",
+    "dmr_rec_v_dmt_upf_s_d_0000034",
+    "dmr_rec_v_dmt_upf_s_d_0000035",
+    "dmr_rec_v_dmt_upf_s_d_0000056",
+
+    "dmr_rec_v_dmt_upf_s_d_1",
+    "dmr_rec_v_dmt_upf_s_d_10",
+    "dmr_rec_v_dmt_upf_s_d_2",
+    "dmr_rec_v_dmt_upf_s_d_21",
+    "dmr_rec_v_dmt_upf_s_d_3",
+    "dmr_rec_v_dmt_upf_s_d_34",
+
+    "dmr_rec_v_dmt_upf_s_d_4",
+    "dmr_rec_v_dmt_upf_s_d_42",
+    "dmr_rec_v_dmt_upf_s_d_44",
+    "dmr_rec_v_dmt_upf_s_d_45",
+    "dmr_rec_v_dmt_upf_s_d_47",
+    "dmr_rec_v_dmt_upf_s_d_48",
+
+    "dmr_rec_v_dmt_upf_s_d_5",
+    "dmr_rec_v_dmt_upf_s_d_50",
+    "dmr_rec_v_dmt_upf_s_d_51",
+    "dmr_rec_v_dmt_upf_s_d_52",
+    "dmr_rec_v_dmt_upf_s_d_53",
+    "dmr_rec_v_dmt_upf_s_d_55",
+    "dmr_rec_v_dmt_upf_s_d_8",
+    "dmr_rec_v_dmt_upf_s_d_9",
+    "dmr_rec_v_dmt_upf_s_m_56"
+  )
+
+  def forTest(): DataFrame = {
+    var joinedData = sqlContext.sql(s"select * from hyzs.${testTables(0)}")
+    for(tableName <- testTables.drop(1)){
+      val table = sqlContext.sql(s"select * from hyzs.$tableName")
+      joinedData = joinedData.join(table, Seq(key), "left_outer")
+    }
+    joinedData
   }
 
   // generate label table and split data
@@ -168,7 +238,7 @@ object JDDataProcess {
     for( (task, params) <- labelProcessMap) {
       val labelTable = labelGenerateProcess(task, params._1, params._2)
       saveTable(labelTable, s"${task}_label")
-      val dataTable = dataGenerateProcess(allData, params._1 :+ originalKey)
+      val dataTable = dataGenerateProcess(allData, params._1)
       val splitData = dataTable.randomSplit(Array(0.7, 0.2, 0.1))
       val train = splitData(0)
       val valid = splitData(1)
@@ -191,20 +261,23 @@ object JDDataProcess {
         (Array("mem_vip_f0011", "mem_vip_f0001"), Array(0.0, 0.0))
     )
     for((task, params) <- labelProcessMap){
-      val dataTable = dataGenerateProcess(allData, params._1 :+ originalKey)
+      val dataTable = dataGenerateProcess(allData, params._1)
       saveTable(dataTable, s"${task}_test")
     }
 
   }
 
+
   def joinTableProcess(oldResult: DataFrame, tableName: String): DataFrame ={
     val newTable = sqlContext.sql(s"select * from hyzs.$tableName")
     val newResult = oldResult.join(newTable, Seq(key), "left_outer")
-      //.dropDuplicates(Seq(key))
-      //.repartition(partitionNums, col(key))
-      //.persist(StorageLevel.MEMORY_AND_DISK)
-    //newResult.first()
-    println(s"xkqyj joined table: $tableName , ${newResult.rdd.partitions.size}")
+      .dropDuplicates(Seq(key))
+      .repartition(partitionNums, col(key))
+      .persist(StorageLevel.MEMORY_AND_DISK)
+    newResult.first()
+    println(s"xkqyj joined table: $tableName, ${newResult.rdd.partitions.size}")
+    // unpersist after action
+    oldResult.unpersist()
     newResult
   }
 
@@ -216,7 +289,8 @@ object JDDataProcess {
     val header = sc.getConf.get("spark.processJob.headerPath")
     val tableStr = sc.getConf.get("spark.processJob.fileNames")
     val sampleRatio = sc.getConf.get("spark.processJob.SampleRatio")
-
+    //val dropFlag = sc.getConf.get("spark.processJob.DropFlag")
+    //val actionStage = sc.getConf.get("spark.processJob.ActionStage")
     val tables = tableStr.split(",")
     // check and filter if file exists
     val validTables = tables.filter(
@@ -228,7 +302,7 @@ object JDDataProcess {
       val headerPath=s"$header$tableName.txt"
       val dataPath=s"$data$tableName.txt"
       val hisData = createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath)
-      val hisTable = processHis(hisData)
+      val hisTable = processNull(processHis(hisData))
         .repartition(numPartitions = partitionNums, col(key))
       saveTable(hisTable, validTables(0))
     }
@@ -237,8 +311,9 @@ object JDDataProcess {
       for(tableName <- validTables.drop(1)){
         val headerPath=s"$header$tableName.txt"
         val dataPath=s"$data$tableName.txt"
-        val table = createDFfromBadFile(headerPath=headerPath, dataPath=dataPath)
-           .drop(originalKey)
+        val table = processNull(createDFfromSeparateFile(headerPath=headerPath, dataPath=dataPath))
+            .withColumn(key, md5Udf(col(originalKey)))
+            .drop(originalKey)
            .repartition(numPartitions = partitionNums, col(key))
         saveTable(table, tableName)
       }
@@ -246,14 +321,18 @@ object JDDataProcess {
 
     // big table join process
     var result = sqlContext.sql(s"select * from hyzs.${validTables(0)}")
-     // .sample(withReplacement=false, sampleRatio.toDouble)
-      .repartition(numPartitions = partitionNums, col(key))
-
+    //  .sample(withReplacement=false, sampleRatio.toDouble)
+      .repartition(numPartitions = partitionNums)
+    println("")
+    // .cache()
+    // .repartition(col(key))
+    //  .persist(StorageLevel.MEMORY_AND_DISK)
     for(tableName <- validTables.drop(1)) {
       result = joinTableProcess(result, tableName)
+       // .dropDuplicates(Seq(key))
     }
-
-    result.repartition(numPartitions = partitionNums)
+    // process NA values, save all_data table
+    //val allData = processEmpty(result)
     saveTable(result, "all_data")
     // if only for prediction, not need to split data or generate label table
     if (args.length>1 && args(1) == "predict"){
