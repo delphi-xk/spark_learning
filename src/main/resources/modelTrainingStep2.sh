@@ -6,7 +6,6 @@ localBasePath=$3
 
 echo "dbHome=${dbHome}"
 echo "basePath=${basePath}"
-echo "localBasePath=${localBasePath}"
 
 for task in m1 m2 m3
 do
@@ -44,6 +43,4 @@ do
 
   done
 done
-
-
 echo model training step 2 finished

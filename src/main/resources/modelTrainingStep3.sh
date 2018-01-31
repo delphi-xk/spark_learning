@@ -4,6 +4,7 @@ localBasePath=$1
 hbasePath=$2
 
 echo "localBasePath=${localBasePath}"
+echo "hbasePath=${hbasePath}"
 
 if [ ! -d ${localBasePath} ]; then
   mkdir ${localBasePath}
@@ -16,7 +17,6 @@ do
       mkdir ${localBasePath}/${task}/result
   fi
 
-  mkdir ${localBasePath}/${task}/result
   python /export/grid/03/qiuyujiang/hyzs/hyzs_shell/js_run/train.py \
   --params '{"sample_path":"'${localBasePath}'/'${task}'/train/hyzs.'${task}'_train.libsvm",
   "sample_auc_path":"'${localBasePath}'/'${task}'/result/log.gbt-train-auc",
@@ -38,14 +38,13 @@ done
 
 for task in m1 m2 m3
 do
-python /export/grid/03/qiuyujiang/hyzs/hyzs_shell/concat_index.py \
-  ${localBasePath}/${task}/test/hyzs.${task}_test.index \
-  ${localBasePath}/${task}/result/hyzs.${task}_test.pred \
-  ${localBasePath}/${task}/result/hyzs.${task}_test.result
+  python /export/grid/03/qiuyujiang/hyzs/hyzs_shell/concat_index.py \
+    ${localBasePath}/${task}/test/hyzs.${task}_test.index \
+    ${localBasePath}/${task}/result/hyzs.${task}_test.pred \
+    ${localBasePath}/${task}/result/hyzs.${task}_test.result
 
-sed -i "s/$/&,${task}/g" ${localBasePath}/${task}/result/hyzs.${task}_test.result
-hdfs dfs -put ${localBasePath}/${task}/result/hyzs.${task}_test.result ${hbasePath}
+  sed -i "s/$/&,${task}/g" ${localBasePath}/${task}/result/hyzs.${task}_test.result
+  hdfs dfs -put ${localBasePath}/${task}/result/hyzs.${task}_test.result ${hbasePath}
 done
 
 echo model training step 3 finished
-

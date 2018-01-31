@@ -141,7 +141,7 @@ object JDDataProcess_v1 {
   }
 
   // import pin7labels.txt, generate label and data for class training
-/*  def generateClassLabelAndData(labelFilePath: String): Unit = {
+  def generateClassLabelAndData(labelFilePath: String): Unit = {
     val allLabels = createDFfromRawCsv(Array("phone", "label", "user_id"), labelFilePath, "\\t")
     saveTable(allLabels, "pin_all_labels")
     val tasks = Array("c1", "c2", "c3", "c4", "c5", "c6", "c7")
@@ -161,7 +161,7 @@ object JDDataProcess_v1 {
     generateClassLabelAndData("/hyzs/files/pin7labels.txt")
 
   }
-  */
+
 
   // ensure dataFrame.columns contains filterCols
   def dataGenerateProcess(dataFrame: DataFrame, filterCols:Array[String]): DataFrame = {
