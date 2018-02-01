@@ -24,8 +24,8 @@ import java.sql.Timestamp
 import java.text.SimpleDateFormat
 
 import scala.util.control.Exception._
-
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types._
 
 object InferSchema {
@@ -196,5 +196,30 @@ object InferSchema {
 
     case _ => None
   }
+
+  def inferSchema(df: DataFrame): StructType = {
+    val rdd = df.rdd.map{ r =>
+      val row_seq = r.toSeq
+      row_seq.map{ col =>
+        if(col != null) col.toString
+        else ""
+      }.map(mapDataToType).toArray
+    }
+    val types = rdd.reduce(InferSchema.mergeRowTypes)
+    val structs = df.columns.zipAll(types,"NaCols", NullType)
+      .map{ case (colName, colType) =>
+      val rootType = colType match {
+        case NullType => StringType
+        case other => other
+      }
+      StructField(colName, rootType)
+    }
+    StructType(structs)
+  }
+
+  def mapDataToType(datum: String): DataType = {
+    InferSchema.inferField(NullType, datum)
+  }
+
 }
 

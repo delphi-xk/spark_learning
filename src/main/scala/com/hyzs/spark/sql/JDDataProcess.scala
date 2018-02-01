@@ -4,6 +4,7 @@ package com.hyzs.spark.sql
   * Created by XIANGKUN on 2018/1/9.
   */
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.ml.feature.{MinMaxScaler, VectorAssembler}
 import org.apache.spark.mllib.linalg.{Matrices, Vector}
@@ -15,12 +16,12 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object JDDataProcess {
 
-  val conf = new SparkConf().setAppName("DataProcess")
+  val conf: SparkConf = new SparkConf().setAppName("DataProcess")
   val sc = new SparkContext(conf)
   val sqlContext = new HiveContext(sc)
-  val hdConf = sc.hadoopConfiguration
-  val fs = FileSystem.get(hdConf)
-  val partitionNums = sqlContext.getConf("spark.sql.shuffle.partitions").toInt
+  val hdConf: Configuration = sc.hadoopConfiguration
+  val fs: FileSystem = FileSystem.get(hdConf)
+  val partitionNums: Int = sqlContext.getConf("spark.sql.shuffle.partitions").toInt
   val warehouseDir = "/hyzs/warehouse/hyzs.db/"
 
   val originalKey = "user_id"

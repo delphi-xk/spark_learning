@@ -2,7 +2,7 @@ package com.hyzs.spark.ml
 
 
 
-import com.hyzs.spark.utils.InferSchema
+
 import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.feature.{IndexToString, StringIndexer, StringIndexerModel, VectorAssembler}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -14,7 +14,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
-
+import com.hyzs.spark.utils.InferSchema
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -27,7 +27,8 @@ object MLtest {
   val sc = new SparkContext(conf)
   val sqlContext = new org.apache.spark.sql.SQLContext(sc)
   import sqlContext.implicits._
-
+  val originalKey = "user_id"
+  val key = "user_id_md5"
 
   def convertDFtoLibsvm(): Unit = {
 /*    val df = sqlContext.sql("select * from test_data")
@@ -113,8 +114,6 @@ object MLtest {
 
     MLUtils.saveAsLibSVMFile(labelData.coalesce(1), "/hyzs/data/test_libsvm")
 
-
-
   }
 
   def getIndexers(df: DataFrame, col: String): (String, StringIndexerModel) = {
@@ -126,28 +125,57 @@ object MLtest {
     (col, indexer)
   }
 
-  def inferSchema(df: DataFrame): StructType = {
-
-    val oldSchema = df.schema
-    val colLen = df.columns.length
-    //val rdd = df.rdd.map(_.toSeq.mkString(","))
-    val rdd = df.rdd.map{ r =>
-      val row_seq = r.toSeq
-      row_seq.map(_.toString).map(mapDataToType).toArray
+  // TODO: row type cast based on castArray
+  def castRowType(row: Row, castArray: Seq[DataType]): Row = {
+    assert(row.length == castArray.length)
+    val rowData = row.toSeq.zip(castArray)
+    val newRow = rowData.map{ case (datum, dType) =>
+      val newData = (datum, dType) match {
+        case ("", _) => ""
+        case (_, TimestampType) => ""
+      }
+      newData
     }
-
-    val types = rdd.reduce(InferSchema.mergeRowTypes)
-
-    //InferSchema(rdd, df.columns)
-    oldSchema
+    Row.fromSeq(newRow)
   }
 
-  def mapDataToType(datum: String): DataType = {
-    InferSchema.inferField(NullType, datum)
+  def castStringType(df:DataFrame, col:String): (DataFrame, StringIndexerModel) = {
+    val indexer = new StringIndexer()
+      .setInputCol(col)
+      .setOutputCol(s"${col}_indexer")
+      .setHandleInvalid("skip")
+      .fit(df)
+    val transformed = indexer.transform(df).drop(col).withColumn(col, df(s"${col}_indexer"))
+    (transformed, indexer)
+  }
+
+  def castDFdtype(df:DataFrame, colName:String, dType:DataType): DataFrame = {
+    assert(df.columns contains colName)
+    val indexerArray = new ArrayBuffer[StringIndexerModel]
+    val df_new = dType match {
+      case StringType => {
+        val (res, indexer) = castStringType(df, colName)
+        indexerArray.append(indexer)
+        res
+      }
+      case TimestampType => df.withColumn(s"$colName", unix_timestamp(df(s"$colName")))
+      case _ => df.withColumn(s"$colName", df(s"$colName").cast(DoubleType))
+    }
+    df_new
   }
 
 
   def main(args: Array[String]): Unit = {
+    val df = sqlContext.table("test.jd_test_data").drop(originalKey)
+
+    // StructType = Seq[StructField]
+    val schema = InferSchema.inferSchema(df)
+
+    val index = df.select(key)
+    val data = df.drop(key)
+
+
+
 
   }
 }
