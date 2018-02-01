@@ -2,6 +2,7 @@ package com.hyzs.spark.ml
 
 
 
+import com.hyzs.spark.utils.InferSchema
 import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.feature.{IndexToString, StringIndexer, StringIndexerModel, VectorAssembler}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -12,8 +13,10 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql._
+import org.apache.spark.sql.types._
 
 import scala.collection.mutable.ArrayBuffer
+
 /**
   * Created by XIANGKUN on 2017/12/5.
   */
@@ -122,6 +125,27 @@ object MLtest {
       .fit(df)
     (col, indexer)
   }
+
+  def inferSchema(df: DataFrame): StructType = {
+
+    val oldSchema = df.schema
+    val colLen = df.columns.length
+    //val rdd = df.rdd.map(_.toSeq.mkString(","))
+    val rdd = df.rdd.map{ r =>
+      val row_seq = r.toSeq
+      row_seq.map(_.toString).map(mapDataToType).toArray
+    }
+
+    val types = rdd.reduce(InferSchema.mergeRowTypes)
+
+    //InferSchema(rdd, df.columns)
+    oldSchema
+  }
+
+  def mapDataToType(datum: String): DataType = {
+    InferSchema.inferField(NullType, datum)
+  }
+
 
   def main(args: Array[String]): Unit = {
 

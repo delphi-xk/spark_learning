@@ -96,5 +96,12 @@ class InferSchemaSuite extends FunSuite {
     assert(
       InferSchema.mergeRowTypes(Array(DoubleType),
         Array(LongType)).deep == Array(DoubleType).deep)
+
+    assert(
+      InferSchema.mergeRowTypes(Array(DoubleType, IntegerType, StringType),
+        Array(DoubleType, DoubleType, DateType)).deep == Array(DoubleType, DoubleType, StringType).deep
+
+    )
+
   }
 }

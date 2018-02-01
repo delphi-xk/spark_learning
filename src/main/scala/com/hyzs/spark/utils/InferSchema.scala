@@ -60,11 +60,11 @@ object InferSchema {
   }
 
   def inferRowType(
-                            nullValue: String,
-                            header: Array[String],
-                            dateFormatter: SimpleDateFormat,
-                            dropMalformed: Boolean = false)
-                          (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
+                  nullValue: String,
+                  header: Array[String],
+                  dateFormatter: SimpleDateFormat,
+                  dropMalformed: Boolean = false)
+                (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     if (header.length != next.length && dropMalformed) {
       // Type inference should not be based on malformed lines in case of DROPMALFORMED parse mode
@@ -78,9 +78,8 @@ object InferSchema {
     }
   }
 
-  def mergeRowTypes(
-                                  first: Array[DataType],
-                                  second: Array[DataType]): Array[DataType] = {
+  def mergeRowTypes(first: Array[DataType],
+                    second: Array[DataType]): Array[DataType] = {
     first.zipAll(second, NullType, NullType).map { case ((a, b)) =>
       findTightestCommonType(a, b).getOrElse(NullType)
     }
