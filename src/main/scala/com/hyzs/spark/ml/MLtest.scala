@@ -14,8 +14,9 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
-import com.hyzs.spark.utils.InferSchema
 import scala.collection.mutable.ArrayBuffer
+
+import com.hyzs.spark.utils.InferSchema
 
 /**
   * Created by XIANGKUN on 2017/12/5.
@@ -145,13 +146,15 @@ object MLtest {
       .setOutputCol(s"${col}_indexer")
       .setHandleInvalid("skip")
       .fit(df)
-    val transformed = indexer.transform(df).drop(col).withColumn(col, df(s"${col}_indexer"))
-    (transformed, indexer)
+    val transformed = indexer.transform(df)
+    val res = transformed.drop(col).withColumn(col, transformed(s"${col}_indexer"))
+    (res, indexer)
   }
+
+  val indexerArray = new ArrayBuffer[StringIndexerModel]
 
   def castDFdtype(df:DataFrame, colName:String, dType:DataType): DataFrame = {
     assert(df.columns contains colName)
-    val indexerArray = new ArrayBuffer[StringIndexerModel]
     val df_new = dType match {
       case StringType => {
         val (res, indexer) = castStringType(df, colName)
@@ -164,7 +167,6 @@ object MLtest {
     df_new
   }
 
-
   def main(args: Array[String]): Unit = {
     val df = sqlContext.table("test.jd_test_data").drop(originalKey)
 
@@ -172,7 +174,14 @@ object MLtest {
     val schema = InferSchema.inferSchema(df)
 
     val index = df.select(key)
-    val data = df.drop(key)
+    val data = df.drop(key).drop(originalKey)
+    val dataSchema = schema.filterNot( field => field.name == key || field.name == originalKey)
+
+    var result = data
+    for(field <- dataSchema){
+      result = castDFdtype(result, field.name, field.dataType)
+    }
+
 
 
 
