@@ -4,6 +4,7 @@ package com.hyzs.spark.sql
   * Created by XIANGKUN on 2018/1/9.
   */
 
+import com.hyzs.spark.utils.SparkUtils._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.ml.feature.{MinMaxScaler, VectorAssembler}
@@ -16,37 +17,9 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object JDDataProcess {
 
-  val conf: SparkConf = new SparkConf().setAppName("DataProcess")
-  val sc = new SparkContext(conf)
-  val sqlContext = new HiveContext(sc)
-  val hdConf: Configuration = sc.hadoopConfiguration
-  val fs: FileSystem = FileSystem.get(hdConf)
-  val partitionNums: Int = sqlContext.getConf("spark.sql.shuffle.partitions").toInt
-  val warehouseDir = "/hyzs/warehouse/hyzs.db/"
-
   val originalKey = "user_id"
   val key = "user_id_md5"
 
-  def checkHDFileExist(filePath: String): Boolean = {
-    val path = new Path(filePath)
-    fs.exists(path)
-  }
-
-  def dropHDFiles(filePath: String): Unit = {
-    val path = new Path(filePath)
-    fs.delete(path, true)
-  }
-
-  def saveTable(df: DataFrame, tableName:String): Unit = {
-    sqlContext.sql(s"drop table if exists hyzs.$tableName")
-    val path = s"$warehouseDir$tableName"
-    if(checkHDFileExist(path))dropHDFiles(path)
-    df.dropDuplicates(Seq(key))
-      .write
-      .option("path",path)
-      .saveAsTable(s"hyzs.$tableName")
-  }
-  
   def createDFfromCsv(path: String, delimiter: String = "\\t"): DataFrame = {
     val data = sc.textFile(path)
     val header = data.first()

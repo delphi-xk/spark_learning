@@ -1,6 +1,7 @@
 package com.hyzs.spark.utils
 
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.{SparkConf, SparkContext}
@@ -10,12 +11,14 @@ import org.apache.spark.sql.hive.HiveContext
   * Created by Administrator on 2018/1/24.
   */
 object SparkUtils {
-  val warehouseDir = "/hyzs/warehouse/hyzs.db/"
-  val conf = new SparkConf().setAppName("ScalaSpark")
+  val conf: SparkConf = new SparkConf().setAppName("DataProcess")
   val sc = new SparkContext(conf)
   val sqlContext = new HiveContext(sc)
-  val hdConf = sc.hadoopConfiguration
-  val fs = FileSystem.get(hdConf)
+  val hdConf: Configuration = sc.hadoopConfiguration
+  val fs: FileSystem = FileSystem.get(hdConf)
+
+  val partitionNums: Int = Option(sqlContext.getConf("spark.sql.shuffle.partitions")).getOrElse("200").toInt
+  val warehouseDir = "/hyzs/warehouse/hyzs.db/"
   val defaultDb = "hyzs"
 
   def checkHDFileExist(filePath: String): Boolean = {
@@ -27,16 +30,15 @@ object SparkUtils {
     val path = new Path(filePath)
     fs.delete(path, true)
   }
-  def saveTable(df: DataFrame, tableName:String): Unit = {
-    sqlContext.sql(s"drop table if exists $defaultDb.$tableName")
+  def saveTable(df: DataFrame, tableName:String, dbName:String=defaultDb): Unit = {
+    sqlContext.sql(s"drop table if exists $dbName.$tableName")
     val path = s"$warehouseDir$tableName"
     if(checkHDFileExist(path))dropHDFiles(path)
-    //println("xkqyj going to save")
     df.write
-      //.format("orc")
       .option("path",path)
-      .saveAsTable(s"hyzs.$tableName")
+      .saveAsTable(s"$dbName.$tableName")
   }
+
 
 
 }

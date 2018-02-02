@@ -16,6 +16,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 import scala.collection.mutable.ArrayBuffer
 
+import com.hyzs.spark.utils.SparkUtils._
 import com.hyzs.spark.utils.InferSchema
 
 /**
@@ -24,10 +25,6 @@ import com.hyzs.spark.utils.InferSchema
 object MLtest {
 
 
-  val conf = new SparkConf().setAppName("DataTest")
-  val sc = new SparkContext(conf)
-  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-  import sqlContext.implicits._
   val originalKey = "user_id"
   val key = "user_id_md5"
 
@@ -123,7 +120,7 @@ object MLtest {
       .setOutputCol(s"${col}_indexer")
       .setHandleInvalid("skip")
       .fit(df)
-    (col, indexer)
+    (col,indexer)
   }
 
   // TODO: row type cast based on castArray
@@ -147,7 +144,7 @@ object MLtest {
       .setHandleInvalid("skip")
       .fit(df)
     val transformed = indexer.transform(df)
-    val res = transformed.drop(col).withColumn(col, transformed(s"${col}_indexer"))
+    val res = transformed.withColumn(col, transformed(s"${col}_indexer")).drop(s"${col}_indexer")
     (res, indexer)
   }
 
@@ -156,35 +153,56 @@ object MLtest {
   def castDFdtype(df:DataFrame, colName:String, dType:DataType): DataFrame = {
     assert(df.columns contains colName)
     val df_new = dType match {
-      case StringType => {
+      case StringType =>
         val (res, indexer) = castStringType(df, colName)
         indexerArray.append(indexer)
         res
-      }
       case TimestampType => df.withColumn(s"$colName", unix_timestamp(df(s"$colName")))
       case _ => df.withColumn(s"$colName", df(s"$colName").cast(DoubleType))
     }
     df_new
   }
 
+  def replaceIndexedCols(df:DataFrame, cols:Seq[String]): DataFrame = {
+    val remainCols = df.columns diff cols
+    val replaceExprs = cols.map( col => s" ${col}_indexer as $col")
+    df.selectExpr(remainCols ++: replaceExprs: _*)
+  }
+
+  def dropOldCols(df:DataFrame, stringCols:Seq[String], timeCols:Seq[String], numberCols:Seq[String]): DataFrame = {
+    val strExprs = stringCols.map(col => s" ${col}_indexer as $col")
+    val timeExprs = timeCols.map(col => s" ${col}_stamp as $col")
+    val numberExprs = numberCols.map(col =>  s" ${col}_number as $col")
+    df.selectExpr(strExprs ++: timeExprs ++: numberExprs :_*)
+  }
+
   def main(args: Array[String]): Unit = {
     val df = sqlContext.table("test.jd_test_data").drop(originalKey)
 
-    // StructType = Seq[StructField]
-    val schema = InferSchema.inferSchema(df)
-
     val index = df.select(key)
-    val data = df.drop(key).drop(originalKey)
-    val dataSchema = schema.filterNot( field => field.name == key || field.name == originalKey)
+    val data = df.drop(key).na.fill("")
+    val dataSchema = InferSchema.inferSchema(data)
+    val stringSchema = dataSchema.filter(field => field.dataType == StringType)
+    val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
 
-    var result = data
-    for(field <- dataSchema){
-      result = castDFdtype(result, field.name, field.dataType)
+    val indexerArray = stringSchema.map(field => getIndexers(data, field.name))
+    val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
+    val stringCols = stringSchema.map(field => field.name)
+    val timeCols = timeSchema.map(field => field.name)
+    val numberCols = data.columns diff stringCols diff timeCols
+    val stringModels = pipeline.fit(data)
+    var result = stringModels.transform(data)
+
+    for(col <- timeCols){
+      result = result.withColumn(s"${col}_stamp", unix_timestamp(result(col)))
     }
 
+    for(col <- numberCols){
+      result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
+    }
 
-
-
+    result = dropOldCols(result, stringCols, timeCols, numberCols)
+    saveTable(result, "jd_test_result", "test")
 
   }
 }
