@@ -14,10 +14,11 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
-import scala.collection.mutable.ArrayBuffer
 
+import scala.collection.mutable.ArrayBuffer
 import com.hyzs.spark.utils.SparkUtils._
-import com.hyzs.spark.utils.InferSchema
+import com.hyzs.spark.utils.{BaseUtil, InferSchema, SparkUtils}
+import java.math.BigDecimal
 
 /**
   * Created by XIANGKUN on 2017/12/5.
@@ -129,7 +130,7 @@ object MLtest {
     val rowData = row.toSeq.zip(castArray)
     val newRow = rowData.map{ case (datum, dType) =>
       val newData = (datum, dType) match {
-        case ("", _) => ""
+        case ("", _) => "0"
         case (_, TimestampType) => ""
       }
       newData
@@ -170,20 +171,60 @@ object MLtest {
   }
 
   def dropOldCols(df:DataFrame, stringCols:Seq[String], timeCols:Seq[String], numberCols:Seq[String]): DataFrame = {
-    val strExprs = stringCols.map(col => s" ${col}_indexer as $col")
+    // add string index start with 1
+    val strExprs = stringCols.map(col => s" (${col}_indexer + 1) as $col")
     val timeExprs = timeCols.map(col => s" ${col}_stamp as $col")
     val numberExprs = numberCols.map(col =>  s" ${col}_number as $col")
     df.selectExpr(strExprs ++: timeExprs ++: numberExprs :_*)
   }
 
+  def castTimestampFuc(time:String): Long = {
+    BaseUtil.getUnixStamp(time).getOrElse(0)
+  }
+
+  def castLibsvmString(row: Row, label:Double=0.0 ): String = {
+    val datum = row.toSeq
+    val resString = new StringBuilder(label.toString)
+    datum.zipWithIndex.foreach{ case (field,i) => {
+        if(field != 0.0){
+          val digit = new BigDecimal(field.toString)
+          resString += ' '
+          resString ++= s"${i+1}:${digit.toPlainString}"
+        }
+      }
+    }
+    resString.toString()
+  }
+
+  def saveLibsvmFile(df:DataFrame): Unit = {
+    val assembler = new VectorAssembler()
+      .setInputCols(df.columns)
+      .setOutputCol("features")
+
+    val pipeline2 = new Pipeline().setStages(Array(assembler))
+    val model2 = pipeline2.fit(df)
+    val res = model2.transform(df).select("features")
+
+    val labeledFunc: (Vector => LabeledPoint) = (vector: Vector) =>{
+      LabeledPoint(0.0, vector)
+    }
+
+    val labelData = res.select("features").rdd.map{ x: Row => x.getAs[Vector](0)}.map(labeledFunc)
+
+    MLUtils.saveAsLibSVMFile(labelData.coalesce(1), "/hyzs/data/test_libsvm")
+  }
+
+
   def main(args: Array[String]): Unit = {
     val df = sqlContext.table("test.jd_test_data").drop(originalKey)
 
     val index = df.select(key)
-    val data = df.drop(key).na.fill("")
+    val data = df.drop(key).na.fill("0")
+      .na.replace("*", Map("" -> "0", "null" -> "0"))
     val dataSchema = InferSchema.inferSchema(data)
     val stringSchema = dataSchema.filter(field => field.dataType == StringType)
     val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
+    val stampUdf = udf(castTimestampFuc _)
 
     val indexerArray = stringSchema.map(field => getIndexers(data, field.name))
     val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
@@ -194,7 +235,7 @@ object MLtest {
     var result = stringModels.transform(data)
 
     for(col <- timeCols){
-      result = result.withColumn(s"${col}_stamp", unix_timestamp(result(col)))
+      result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
     }
 
     for(col <- numberCols){
@@ -203,6 +244,12 @@ object MLtest {
 
     result = dropOldCols(result, stringCols, timeCols, numberCols)
     saveTable(result, "jd_test_result", "test")
+
+    val libsvmff = result.rdd.map(row => castLibsvmString(row))
+
+    val savePath = "/hyzs/data/test_libsvm"
+    if(checkHDFileExist(savePath))dropHDFiles(savePath)
+    libsvmff.coalesce(1).saveAsTextFile(savePath)
 
   }
 }

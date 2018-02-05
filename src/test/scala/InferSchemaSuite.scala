@@ -18,10 +18,12 @@
   * Created by xiangkun on 2018/1/31.
   */
 
-import com.hyzs.spark.utils.InferSchema
+import com.hyzs.spark.utils.{BaseUtil, InferSchema}
 import org.scalatest.FunSuite
 import java.text.SimpleDateFormat
+
 import org.apache.spark.sql.types._
+
 
 
 class InferSchemaSuite extends FunSuite {
@@ -104,4 +106,16 @@ class InferSchemaSuite extends FunSuite {
     )
 
   }
+
+  test("time formatter") {
+    val t1 = "2017-10-18 13:13:43"
+    val t2 = "20171018131343"
+    val t3 = ""
+    println(BaseUtil.getUnixStamp(t1).getOrElse(0))
+    println(BaseUtil.getUnixStamp(t2).getOrElse(0))
+    println(BaseUtil.getUnixStamp(t3).getOrElse(0))
+
+
+  }
+
 }

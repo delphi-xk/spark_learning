@@ -7,6 +7,8 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
 
+
+
 /**
   * Created by Administrator on 2018/1/24.
   */
@@ -20,6 +22,7 @@ object SparkUtils {
   val partitionNums: Int = Option(sqlContext.getConf("spark.sql.shuffle.partitions")).getOrElse("200").toInt
   val warehouseDir = "/hyzs/warehouse/hyzs.db/"
   val defaultDb = "hyzs"
+
 
   def checkHDFileExist(filePath: String): Boolean = {
     val path = new Path(filePath)
