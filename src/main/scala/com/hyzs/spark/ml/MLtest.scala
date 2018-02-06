@@ -15,10 +15,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import com.hyzs.spark.utils.SparkUtils._
-import com.hyzs.spark.utils.{BaseUtil, InferSchema, SparkUtils}
+import com.hyzs.spark.utils.{BaseUtil, InferSchema, JsonUtil, Params, SparkUtils}
 import java.math.BigDecimal
+
+import com.hyzs.spark.bean.BaseObj
 
 /**
   * Created by XIANGKUN on 2017/12/5.
@@ -237,6 +239,24 @@ object MLtest {
     saveTable(table, "jd_test_data")
   }
 
+  def buildObjRdd(dataSchema:StructType,
+                  indexerArray:Array[(String,StringIndexerModel)]): RDD[String] = {
+    case class Ob1(key:Int, value:String) extends BaseObj
+    case class Ob2(key:Int, value:String, map:Map[String,Int]) extends BaseObj
+    val resList:ListBuffer[BaseObj] = ListBuffer[BaseObj]()
+    resList += Ob1(0, Params.NO_TYPE)
+    val indexerMap: Map[String,Map[String,Int]] = indexerArray.map{ case (name,model) =>
+      (name, model.labels.zip(1 to model.labels.length).toMap)
+    }.toMap
+
+    (1 to dataSchema.length).zip(dataSchema).foreach{ case (index, field) =>
+
+
+    }
+
+    null
+  }
+
   def main(args: Array[String]): Unit = {
     if(args.length >0 && args(0) == "import"){
       import_data()
@@ -270,7 +290,7 @@ object MLtest {
 
     result = dropOldCols(result, stringCols, timeCols, numberCols)
     saveTable(result, "jd_test_result")
-
+    result.toJSON
     // zip rdd should have THE SAME partitions
     val libsvmff = result.rdd.zip(index).map{
       case (row, i) => castLibsvmString(i, row)

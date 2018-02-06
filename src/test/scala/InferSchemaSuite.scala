@@ -18,12 +18,16 @@
   * Created by xiangkun on 2018/1/31.
   */
 
-import com.hyzs.spark.utils.{BaseUtil, InferSchema}
+import java.io.StringWriter
+
+import com.hyzs.spark.utils.{BaseUtil, InferSchema, JsonUtil}
 import org.scalatest.FunSuite
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.types._
-
+import com.fasterxml.jackson.core._
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 
 class InferSchemaSuite extends FunSuite {
@@ -115,7 +119,23 @@ class InferSchemaSuite extends FunSuite {
     println(BaseUtil.getUnixStamp(t2).getOrElse(0))
     println(BaseUtil.getUnixStamp(t3).getOrElse(0))
 
+  }
 
+  test("json test") {
+    case class User(name:String, score:Double, address:Map[String,Int]) extends BaseUser
+    case class User2(name:String, score:Double) extends BaseUser
+    val u1 = User("aaa", 999.0, Map("Honor" -> 1))
+    val u2 = User2("aaa", 999.0)
+    val li:List[BaseUser] = List(u1, u2)
+    println(JsonUtil.toJson(li))
   }
 
 }
+
+abstract class BaseUser{
+  def name:String
+  def score:Double
+}
+
+
+
