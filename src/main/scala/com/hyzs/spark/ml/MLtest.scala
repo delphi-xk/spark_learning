@@ -182,9 +182,9 @@ object MLtest {
     BaseUtil.getUnixStamp(time).getOrElse(0)
   }
 
-  def castLibsvmString(row: Row, label:Double=0.0 ): String = {
+  def castLibsvmString(label:String="0.0", row: Row): String = {
     val datum = row.toSeq
-    val resString = new StringBuilder(label.toString)
+    val resString = new StringBuilder(label)
     datum.zipWithIndex.foreach{ case (field,i) => {
         if(field != 0.0){
           val digit = new BigDecimal(field.toString)
@@ -196,7 +196,7 @@ object MLtest {
     resString.toString()
   }
 
-  def saveLibsvmFile(df:DataFrame): Unit = {
+  def saveLibsvmFile_old(df:DataFrame): Unit = {
     val assembler = new VectorAssembler()
       .setInputCols(df.columns)
       .setOutputCol("features")
@@ -214,11 +214,37 @@ object MLtest {
     MLUtils.saveAsLibSVMFile(labelData.coalesce(1), "/hyzs/data/test_libsvm")
   }
 
+  def saveRdd(rdd:RDD[String], savePath:String): Unit = {
+    if(checkHDFileExist(savePath))
+      dropHDFiles(savePath)
+    rdd.coalesce(1)
+      .saveAsTextFile(savePath)
+  }
+
+  def import_data(): Unit = {
+    val header = sc.textFile("/hyzs/test/fea.header").first().split(",").map(col => StructField(col, StringType))
+    val dataFile = sc.textFile("/hyzs/test/feature_data.txt")
+    val data = dataFile
+      .filter(row => !row.isEmpty)
+      .map( (row:String) => {
+        val arr = row.split("\\t", -1)
+        arr(0) +: arr(1) +: arr(2).split(",", -1)
+      })
+      .filter( arr => arr.length <= header.length)
+      .map(fields => Row(fields: _*))
+    val struct = StructType(header)
+    val table = sqlContext.createDataFrame(data, struct)
+    saveTable(table, "jd_test_data")
+  }
 
   def main(args: Array[String]): Unit = {
-    val df = sqlContext.table("test.jd_test_data").drop(originalKey)
+    if(args.length >0 && args(0) == "import"){
+      import_data()
+    }
+    val df = sqlContext.table("hyzs.jd_test_data").drop(originalKey)
 
-    val index = df.select(key)
+    val index = df.select(key).rdd.map(row => row.getString(0))
+    val name = sc.makeRDD[String](df.columns)
     val data = df.drop(key).na.fill("0")
       .na.replace("*", Map("" -> "0", "null" -> "0"))
     val dataSchema = InferSchema.inferSchema(data)
@@ -243,13 +269,15 @@ object MLtest {
     }
 
     result = dropOldCols(result, stringCols, timeCols, numberCols)
-    saveTable(result, "jd_test_result", "test")
+    saveTable(result, "jd_test_result")
 
-    val libsvmff = result.rdd.map(row => castLibsvmString(row))
+    // zip rdd should have THE SAME partitions
+    val libsvmff = result.rdd.zip(index).map{
+      case (row, i) => castLibsvmString(i, row)
+    }
 
-    val savePath = "/hyzs/data/test_libsvm"
-    if(checkHDFileExist(savePath))dropHDFiles(savePath)
-    libsvmff.coalesce(1).saveAsTextFile(savePath)
-
+    saveRdd(libsvmff, "/hyzs/data/test_libsvm")
+    saveRdd(index, "/hyzs/data/test_index")
+    saveRdd(name, "/hyzs/data/test_name")
   }
 }

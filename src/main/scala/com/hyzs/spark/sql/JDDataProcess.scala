@@ -57,10 +57,12 @@ object JDDataProcess {
     val dataFile = sc.textFile(dataPath)
     val header = headerFile.first().split(headerSplitter)
           .map( col => StructField(col, StringType))
-    val rows = dataFile.map( (row:String) => {
+    val rows = dataFile.filter(row => !row.isEmpty)
+      .map( (row:String) => {
         val arrs = row.split("\\t", -1)
         arrs(0) +: arrs(1) +: arrs(2).split(",",-1)
-    }).filter( arr => arr.length <= header.length)
+    })
+      .filter( arr => arr.length <= header.length)
       .map(fields => Row(fields: _*))
     val struct = StructType(header)
     sqlContext.createDataFrame(rows, struct)

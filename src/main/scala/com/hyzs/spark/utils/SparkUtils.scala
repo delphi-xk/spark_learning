@@ -21,7 +21,7 @@ object SparkUtils {
 
   val partitionNums: Int = Option(sqlContext.getConf("spark.sql.shuffle.partitions")).getOrElse("200").toInt
   val warehouseDir = "/hyzs/warehouse/hyzs.db/"
-  val defaultDb = "hyzs"
+
 
 
   def checkHDFileExist(filePath: String): Boolean = {
@@ -33,7 +33,7 @@ object SparkUtils {
     val path = new Path(filePath)
     fs.delete(path, true)
   }
-  def saveTable(df: DataFrame, tableName:String, dbName:String=defaultDb): Unit = {
+  def saveTable(df: DataFrame, tableName:String, dbName:String="hyzs"): Unit = {
     sqlContext.sql(s"drop table if exists $dbName.$tableName")
     val path = s"$warehouseDir$tableName"
     if(checkHDFileExist(path))dropHDFiles(path)
