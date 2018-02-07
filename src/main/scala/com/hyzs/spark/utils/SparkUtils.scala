@@ -1,8 +1,11 @@
 package com.hyzs.spark.utils
 
 
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
@@ -21,7 +24,11 @@ object SparkUtils {
 
   val partitionNums: Int = Option(sqlContext.getConf("spark.sql.shuffle.partitions")).getOrElse("200").toInt
   val warehouseDir = "/hyzs/warehouse/hyzs.db/"
-
+  val mapper = new ObjectMapper()
+    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+  // NOTE: not serializable
+  //  .registerModule(DefaultScalaModule)
+  val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)
 
 
   def checkHDFileExist(filePath: String): Boolean = {

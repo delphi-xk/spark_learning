@@ -20,11 +20,17 @@ import com.hyzs.spark.utils.SparkUtils._
 import com.hyzs.spark.utils.{BaseUtil, InferSchema, JsonUtil, Params, SparkUtils}
 import java.math.BigDecimal
 
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.hyzs.spark.bean.BaseObj
 
 /**
   * Created by XIANGKUN on 2017/12/5.
   */
+
+case class Ob1(key:Int, value:String) extends BaseObj
+case class Ob2(key:Int, value:String, map:Map[String,Int]) extends BaseObj
+
 object MLtest {
 
 
@@ -32,39 +38,39 @@ object MLtest {
   val key = "user_id_md5"
 
   def convertDFtoLibsvm(): Unit = {
-/*    val df = sqlContext.sql("select * from test_data")
-    val labelArray = df.select("jdmall_user_p0003").distinct.map(_.getString(0)).collect
-    val labelMap = labelArray.zipWithIndex.toMap*/
+    /*    val df = sqlContext.sql("select * from test_data")
+        val labelArray = df.select("jdmall_user_p0003").distinct.map(_.getString(0)).collect
+        val labelMap = labelArray.zipWithIndex.toMap*/
 
-/*    val label = sqlContext.sql("select * from consume_label limit 100")
-    val test = label.join(df, Seq("user_id"), "left_outer")
-    val rdd_test: RDD[Vector] = test.rdd.map( row => Vectors.dense(row.getDouble(0), row.getDouble(2)) )*/
+    /*    val label = sqlContext.sql("select * from consume_label limit 100")
+        val test = label.join(df, Seq("user_id"), "left_outer")
+        val rdd_test: RDD[Vector] = test.rdd.map( row => Vectors.dense(row.getDouble(0), row.getDouble(2)) )*/
 
-/*   val indexer = new StringIndexer()
-      .setInputCol("jdmall_user_p0003")
-      .setOutputCol("p0003_indexer")
-      .setHandleInvalid("skip")
-      .fit(df)
-      val converter = new IndexToString()
-         .setInputCol("p0003_indexer")
-         .setOutputCol("p0003_converter")
-         .setLabels(indexer.labels)
-       val indexer2 = new StringIndexer()
-         .setInputCol("mkt_schd_p0001328")
-         .setOutputCol("p0001328_indexer")
-         .setHandleInvalid("skip")
-         .fit(df)
-       val converter2 = new IndexToString()
-         .setInputCol("p0001328_indexer")
-         .setOutputCol("p0001328_converter")
-         .setLabels(indexer2.labels)
+    /*   val indexer = new StringIndexer()
+          .setInputCol("jdmall_user_p0003")
+          .setOutputCol("p0003_indexer")
+          .setHandleInvalid("skip")
+          .fit(df)
+          val converter = new IndexToString()
+             .setInputCol("p0003_indexer")
+             .setOutputCol("p0003_converter")
+             .setLabels(indexer.labels)
+           val indexer2 = new StringIndexer()
+             .setInputCol("mkt_schd_p0001328")
+             .setOutputCol("p0001328_indexer")
+             .setHandleInvalid("skip")
+             .fit(df)
+           val converter2 = new IndexToString()
+             .setInputCol("p0001328_indexer")
+             .setOutputCol("p0001328_converter")
+             .setLabels(indexer2.labels)
 
-       val pipeline = new Pipeline()
-         .setStages(Array(indexer, indexer2, converter, converter2))
-         .fit(df)
-       val res = pipeline.transform(df).select("user_id",
-         "jdmall_user_p0003","p0003_indexer", "p0003_converter",
-         "mkt_schd_p0001328","p0001328_indexer","p0001328_converter")*/
+           val pipeline = new Pipeline()
+             .setStages(Array(indexer, indexer2, converter, converter2))
+             .fit(df)
+           val res = pipeline.transform(df).select("user_id",
+             "jdmall_user_p0003","p0003_indexer", "p0003_converter",
+             "mkt_schd_p0001328","p0001328_indexer","p0001328_converter")*/
 
     val df = sqlContext.sql("select * from test_data")
 
@@ -188,12 +194,12 @@ object MLtest {
     val datum = row.toSeq
     val resString = new StringBuilder(label)
     datum.zipWithIndex.foreach{ case (field,i) => {
-        if(field != 0.0){
-          val digit = new BigDecimal(field.toString)
-          resString += ' '
-          resString ++= s"${i+1}:${digit.toPlainString}"
-        }
+      if(field != 0.0){
+        val digit = new BigDecimal(field.toString)
+        resString += ' '
+        resString ++= s"${i+1}:${digit.toPlainString}"
       }
+    }
     }
     resString.toString()
   }
@@ -219,8 +225,7 @@ object MLtest {
   def saveRdd(rdd:RDD[String], savePath:String): Unit = {
     if(checkHDFileExist(savePath))
       dropHDFiles(savePath)
-    rdd.coalesce(1)
-      .saveAsTextFile(savePath)
+    rdd.coalesce(1).saveAsTextFile(savePath)
   }
 
   def import_data(): Unit = {
@@ -240,21 +245,29 @@ object MLtest {
   }
 
   def buildObjRdd(dataSchema:StructType,
-                  indexerArray:Array[(String,StringIndexerModel)]): RDD[String] = {
-    case class Ob1(key:Int, value:String) extends BaseObj
-    case class Ob2(key:Int, value:String, map:Map[String,Int]) extends BaseObj
-    val resList:ListBuffer[BaseObj] = ListBuffer[BaseObj]()
+                  indexerArray:Seq[(String,StringIndexerModel)]): RDD[String] = {
+    val resList:ListBuffer[BaseObj] = new ListBuffer
     resList += Ob1(0, Params.NO_TYPE)
     val indexerMap: Map[String,Map[String,Int]] = indexerArray.map{ case (name,model) =>
       (name, model.labels.zip(1 to model.labels.length).toMap)
     }.toMap
-
     (1 to dataSchema.length).zip(dataSchema).foreach{ case (index, field) =>
-
-
+      val obj = field.dataType match {
+        case IntegerType => Ob1(index, Params.NUMERIC_TYPE)
+        case DoubleType => Ob1(index, Params.NUMERIC_TYPE)
+        case DateType => Ob1(index, Params.DATE_TYPE)
+        case TimestampType => Ob1(index, Params.DATE_TYPE)
+        case StringType => Ob2(index, Params.STRING_TYPE, indexerMap.getOrElse(field.name, Map("null"->0)))
+        case _ => Ob1(index, Params.NUMERIC_TYPE)
+      }
+      resList += obj
     }
-
-    null
+    val resString = resList.map( obj => {
+      broadMapper.value.registerModule(DefaultScalaModule)
+      broadMapper.value.writeValueAsString(obj)
+    })
+    //println(resString(10))
+    sc.makeRDD[String](resString)
   }
 
   def main(args: Array[String]): Unit = {
@@ -263,41 +276,51 @@ object MLtest {
     }
     val df = sqlContext.table("hyzs.jd_test_data").drop(originalKey)
 
-    val index = df.select(key).rdd.map(row => row.getString(0))
-    val name = sc.makeRDD[String](df.columns)
+    val indexRdd = df.select(key).rdd.map(row => row.getString(0))
+    val nameRdd = sc.makeRDD[String](df.columns)
     val data = df.drop(key).na.fill("0")
       .na.replace("*", Map("" -> "0", "null" -> "0"))
     val dataSchema = InferSchema.inferSchema(data)
     val stringSchema = dataSchema.filter(field => field.dataType == StringType)
     val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
     val stampUdf = udf(castTimestampFuc _)
-
     val indexerArray = stringSchema.map(field => getIndexers(data, field.name))
-    val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
-    val stringCols = stringSchema.map(field => field.name)
-    val timeCols = timeSchema.map(field => field.name)
-    val numberCols = data.columns diff stringCols diff timeCols
-    val stringModels = pipeline.fit(data)
-    var result = stringModels.transform(data)
+    val objRdd = buildObjRdd(dataSchema, indexerArray)
 
-    for(col <- timeCols){
-      result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
-    }
+    /*    val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
+        val stringCols = stringSchema.map(field => field.name)
+        val timeCols = timeSchema.map(field => field.name)
+        val numberCols = data.columns diff stringCols diff timeCols
+        val stringModels = pipeline.fit(data)
+        var result = stringModels.transform(data)
 
-    for(col <- numberCols){
-      result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
-    }
+        for(col <- timeCols){
+          result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
+        }
 
-    result = dropOldCols(result, stringCols, timeCols, numberCols)
-    saveTable(result, "jd_test_result")
-    result.toJSON
+        for(col <- numberCols){
+          result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
+        }
+
+        result = dropOldCols(result, stringCols, timeCols, numberCols)
+
+        saveTable(result, "jd_test_result")
+    */
     // zip rdd should have THE SAME partitions
-    val libsvmff = result.rdd.zip(index).map{
-      case (row, i) => castLibsvmString(i, row)
-    }
+    /*    val libsvmff = result.rdd.zip(index).map{
+          case (row, i) => castLibsvmString(i, row)
+        }*/
 
-    saveRdd(libsvmff, "/hyzs/data/test_libsvm")
-    saveRdd(index, "/hyzs/data/test_index")
-    saveRdd(name, "/hyzs/data/test_name")
+
+
+    //saveRdd(libsvmff, "/hyzs/data/test_libsvm")
+    saveRdd(indexRdd, "/hyzs/data/test_index")
+    saveRdd(nameRdd, "/hyzs/data/test_name")
+    saveRdd(objRdd, "/hyzs/data/test_obj")
+
+
+
   }
 }
+
+

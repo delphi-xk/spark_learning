@@ -25,9 +25,7 @@ import org.scalatest.FunSuite
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.types._
-import com.fasterxml.jackson.core._
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import scala.collection.mutable.ListBuffer
 
 
 class InferSchemaSuite extends FunSuite {
@@ -124,17 +122,20 @@ class InferSchemaSuite extends FunSuite {
   test("json test") {
     case class User(name:String, score:Double, address:Map[String,Int]) extends BaseUser
     case class User2(name:String, score:Double) extends BaseUser
-    val u1 = User("aaa", 999.0, Map("Honor" -> 1))
+    val u1 = User("aaa", 999.0, Map("Honor" -> 1, "APPLE" -> 2))
     val u2 = User2("aaa", 999.0)
-    val li:List[BaseUser] = List(u1, u2)
-    println(JsonUtil.toJson(li))
+    val li:ListBuffer[BaseUser] = new ListBuffer()
+    li += u1
+    li += u2
+    val listStr = li.toList.map( user => JsonUtil.toJson(user))
+    println(listStr)
   }
 
 }
 
-abstract class BaseUser{
-  def name:String
-  def score:Double
+trait BaseUser{
+  def  name:String
+  def  score:Double
 }
 
 
