@@ -3,7 +3,7 @@ package com.hyzs.spark.ml
 
 
 
-import org.apache.spark.ml.{Pipeline, PipelineStage}
+import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.feature.{IndexToString, StringIndexer, StringIndexerModel, VectorAssembler}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
@@ -132,19 +132,6 @@ object MLtest {
     (col,indexer)
   }
 
-  // TODO: row type cast based on castArray
-  def castRowType(row: Row, castArray: Seq[DataType]): Row = {
-    assert(row.length == castArray.length)
-    val rowData = row.toSeq.zip(castArray)
-    val newRow = rowData.map{ case (datum, dType) =>
-      val newData = (datum, dType) match {
-        case ("", _) => "0"
-        case (_, TimestampType) => ""
-      }
-      newData
-    }
-    Row.fromSeq(newRow)
-  }
 
   def castStringType(df:DataFrame, col:String): (DataFrame, StringIndexerModel) = {
     val indexer = new StringIndexer()
@@ -189,6 +176,8 @@ object MLtest {
   def castTimestampFuc(time:String): Long = {
     BaseUtil.getUnixStamp(time).getOrElse(0)
   }
+
+
 
   def castLibsvmString(label:String="0.0", row: Row): String = {
     val datum = row.toSeq
@@ -281,39 +270,45 @@ object MLtest {
     val data = df.drop(key).na.fill("0")
       .na.replace("*", Map("" -> "0", "null" -> "0"))
     val dataSchema = InferSchema.inferSchema(data)
+
     val stringSchema = dataSchema.filter(field => field.dataType == StringType)
     val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
     val stampUdf = udf(castTimestampFuc _)
     val indexerArray = stringSchema.map(field => getIndexers(data, field.name))
     val objRdd = buildObjRdd(dataSchema, indexerArray)
 
-    /*    val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
-        val stringCols = stringSchema.map(field => field.name)
-        val timeCols = timeSchema.map(field => field.name)
-        val numberCols = data.columns diff stringCols diff timeCols
-        val stringModels = pipeline.fit(data)
-        var result = stringModels.transform(data)
+    val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
 
-        for(col <- timeCols){
-          result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
-        }
+    val stringCols = stringSchema.map(field => field.name)
+    val timeCols = timeSchema.map(field => field.name)
+    val numberCols = data.columns diff stringCols diff timeCols
+    val stringModels = pipeline.fit(data)
+    var result = stringModels.transform(data)
 
-        for(col <- numberCols){
-          result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
-        }
-
-        result = dropOldCols(result, stringCols, timeCols, numberCols)
-
-        saveTable(result, "jd_test_result")
+    /*
+    stringModels.save("/tmp/model/stringModels")
+    val loadedModel = PipelineModel.load("/tmp/model/stringModels")
+    var result = loadedModel.transform(data)
     */
+
+    for(col <- timeCols){
+      result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
+    }
+
+    for(col <- numberCols){
+      result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
+    }
+
+    result = dropOldCols(result, stringCols, timeCols, numberCols)
+
+    saveTable(result, "jd_test_result")
+
     // zip rdd should have THE SAME partitions
-    /*    val libsvmff = result.rdd.zip(index).map{
-          case (row, i) => castLibsvmString(i, row)
-        }*/
+    val libsvmff = result.rdd.zip(indexRdd).map{
+      case (row, i) => castLibsvmString(i, row)
+    }
 
-
-
-    //saveRdd(libsvmff, "/hyzs/data/test_libsvm")
+    saveRdd(libsvmff, "/hyzs/data/test_libsvm")
     saveRdd(indexRdd, "/hyzs/data/test_index")
     saveRdd(nameRdd, "/hyzs/data/test_name")
     saveRdd(objRdd, "/hyzs/data/test_obj")
