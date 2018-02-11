@@ -25,7 +25,7 @@ object SparkUtils {
   val partitionNums: Int = Option(sqlContext.getConf("spark.sql.shuffle.partitions")).getOrElse("200").toInt
   val warehouseDir = "/hyzs/warehouse/hyzs.db/"
   val mapper = new ObjectMapper()
-    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+  mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
   // NOTE: not serializable
   //  .registerModule(DefaultScalaModule)
   val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)

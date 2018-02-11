@@ -22,20 +22,28 @@ import java.math.BigDecimal
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
 import com.hyzs.spark.bean.BaseObj
 
 /**
   * Created by XIANGKUN on 2017/12/5.
   */
 
-case class Ob1(key:Int, value:String) extends BaseObj
-case class Ob2(key:Int, value:String, map:Map[String,Int]) extends BaseObj
+case class Ob1(key:Int, value:String, fieldName:String) extends BaseObj
+case class Ob2(key:Int, value:String, fieldName:String, map:Map[String,Int] ) extends BaseObj
+case class StructInfo(index:Int, fieldName:String, fieldType:String)
 
 object MLtest {
 
 
   val originalKey = "user_id"
   val key = "user_id_md5"
+
+  val objPath = "/hyzs/data/test_obj"
+  val modelPath = "/hyzs/data/test_model"
+  val libsvmPath = "/hyzs/data/test_libsvm"
+  val indexPath = "/hyzs/data/test_index"
+  val namePath = "/hyzs/data/test_name"
 
   def convertDFtoLibsvm(): Unit = {
     /*    val df = sqlContext.sql("select * from test_data")
@@ -177,18 +185,15 @@ object MLtest {
     BaseUtil.getUnixStamp(time).getOrElse(0)
   }
 
-
-
   def castLibsvmString(label:String="0.0", row: Row): String = {
     val datum = row.toSeq
     val resString = new StringBuilder(label)
-    datum.zipWithIndex.foreach{ case (field,i) => {
-      if(field != 0.0){
-        val digit = new BigDecimal(field.toString)
-        resString += ' '
-        resString ++= s"${i+1}:${digit.toPlainString}"
-      }
-    }
+    datum.zipWithIndex.foreach{ case (field,i) =>
+        if(field != 0.0){
+          val digit = new BigDecimal(field.toString)
+          resString += ' '
+          resString ++= s"${i+1}:${digit.toPlainString}"
+        }
     }
     resString.toString()
   }
@@ -235,28 +240,53 @@ object MLtest {
 
   def buildObjRdd(dataSchema:StructType,
                   indexerArray:Seq[(String,StringIndexerModel)]): RDD[String] = {
-    val resList:ListBuffer[BaseObj] = new ListBuffer
-    resList += Ob1(0, Params.NO_TYPE)
+    val objList:ListBuffer[BaseObj] = new ListBuffer
+    objList += Ob1(0, Params.NO_TYPE, key)
     val indexerMap: Map[String,Map[String,Int]] = indexerArray.map{ case (name,model) =>
       (name, model.labels.zip(1 to model.labels.length).toMap)
     }.toMap
     (1 to dataSchema.length).zip(dataSchema).foreach{ case (index, field) =>
       val obj = field.dataType match {
-        case IntegerType => Ob1(index, Params.NUMERIC_TYPE)
-        case DoubleType => Ob1(index, Params.NUMERIC_TYPE)
-        case DateType => Ob1(index, Params.DATE_TYPE)
-        case TimestampType => Ob1(index, Params.DATE_TYPE)
-        case StringType => Ob2(index, Params.STRING_TYPE, indexerMap.getOrElse(field.name, Map("null"->0)))
-        case _ => Ob1(index, Params.NUMERIC_TYPE)
+        case IntegerType => Ob1(index, Params.NUMERIC_TYPE, field.name)
+        case DoubleType => Ob1(index, Params.NUMERIC_TYPE, field.name)
+        case DateType => Ob1(index, Params.DATE_TYPE, field.name)
+        case TimestampType => Ob1(index, Params.DATE_TYPE, field.name)
+        case StringType => Ob2(index, Params.STRING_TYPE, field.name,
+          indexerMap.getOrElse(field.name, Map("null"->0)))
+        case _ => Ob1(index, Params.NUMERIC_TYPE, field.name)
       }
-      resList += obj
+      objList += obj
     }
-    val resString = resList.map( obj => {
+    val resString = objList.map( obj => {
       broadMapper.value.registerModule(DefaultScalaModule)
       broadMapper.value.writeValueAsString(obj)
     })
     //println(resString(10))
     sc.makeRDD[String](resString)
+  }
+
+  def readObj(filePath:String): Array[Ob1] = {
+    val objRdd = sc.textFile(s"${filePath}/part-00000")
+    val objList = objRdd.collect().map{ record =>
+/*      val mapper = new ObjectMapper()
+      mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+      mapper.registerModule(DefaultScalaModule)
+      val obj = mapper.readValue(record, classOf[Ob1])*/
+      broadMapper.value.registerModule(DefaultScalaModule)
+      val obj = broadMapper.value.readValue(record, classOf[Ob1])
+      //println(s"obj${obj.key}:  ${obj.value}, ${obj.fieldName}")
+      obj
+    }
+    objList
+  }
+
+  def getStructToJson(dataSchema:StructType): RDD[String] = {
+    val structArray = (1 to dataSchema.length).zip(dataSchema).map{ case (index,field) =>
+      val info = StructInfo(index, field.name, field.dataType.typeName)
+      broadMapper.value.registerModule(DefaultScalaModule)
+      broadMapper.value.writeValueAsString(info)
+    }
+    sc.makeRDD(structArray)
   }
 
   def main(args: Array[String]): Unit = {
@@ -269,28 +299,42 @@ object MLtest {
     val nameRdd = sc.makeRDD[String](df.columns)
     val data = df.drop(key).na.fill("0")
       .na.replace("*", Map("" -> "0", "null" -> "0"))
-    val dataSchema = InferSchema.inferSchema(data)
+    val dataColsArray = data.columns
+    var stringCols = Seq[String]()
+    var timeCols = Seq[String]()
+    var numberCols = Seq[String]()
+    var result: DataFrame = null
+    if(args.length >0 && args(0) == "predict"){
+      val pipeline = Pipeline.load(modelPath)
+      result = pipeline.fit(data).transform(data)
 
-    val stringSchema = dataSchema.filter(field => field.dataType == StringType)
-    val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
+      val objList = readObj(objPath)
+      stringCols = objList.filter(obj => obj.value == Params.STRING_TYPE).map(_.fieldName)
+      timeCols = objList.filter(obj => obj.value == Params.DATE_TYPE).map(_.fieldName)
+      numberCols = objList.filter(obj => obj.value == Params.NUMERIC_TYPE).map(_.fieldName)
+
+    } else if(args.length >0 && args(0) == "train"){
+      val dataSchema = InferSchema.inferSchema(data)
+      val stringSchema = dataSchema.filter(field => field.dataType == StringType)
+      val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
+
+      val indexerArray = stringSchema.map(field => getIndexers(data, field.name))
+      val objRdd = buildObjRdd(dataSchema, indexerArray)
+      val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
+      stringCols = stringSchema.map(field => field.name)
+      timeCols = timeSchema.map(field => field.name)
+      numberCols = data.columns diff stringCols diff timeCols
+
+      if(checkHDFileExist(modelPath))dropHDFiles(modelPath)
+      pipeline.save(modelPath)
+
+      result = pipeline.fit(data).transform(data)
+
+      saveRdd(objRdd, objPath)
+      saveRdd(nameRdd, namePath)
+    }
+
     val stampUdf = udf(castTimestampFuc _)
-    val indexerArray = stringSchema.map(field => getIndexers(data, field.name))
-    val objRdd = buildObjRdd(dataSchema, indexerArray)
-
-    val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
-
-    val stringCols = stringSchema.map(field => field.name)
-    val timeCols = timeSchema.map(field => field.name)
-    val numberCols = data.columns diff stringCols diff timeCols
-    val stringModels = pipeline.fit(data)
-    var result = stringModels.transform(data)
-
-    /*
-    stringModels.save("/tmp/model/stringModels")
-    val loadedModel = PipelineModel.load("/tmp/model/stringModels")
-    var result = loadedModel.transform(data)
-    */
-
     for(col <- timeCols){
       result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
     }
@@ -298,9 +342,8 @@ object MLtest {
     for(col <- numberCols){
       result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
     }
-
     result = dropOldCols(result, stringCols, timeCols, numberCols)
-
+    result = result.selectExpr(dataColsArray:_*)
     saveTable(result, "jd_test_result")
 
     // zip rdd should have THE SAME partitions
@@ -308,12 +351,8 @@ object MLtest {
       case (row, i) => castLibsvmString(i, row)
     }
 
-    saveRdd(libsvmff, "/hyzs/data/test_libsvm")
-    saveRdd(indexRdd, "/hyzs/data/test_index")
-    saveRdd(nameRdd, "/hyzs/data/test_name")
-    saveRdd(objRdd, "/hyzs/data/test_obj")
-
-
+    saveRdd(libsvmff, libsvmPath)
+    saveRdd(indexRdd, indexPath)
 
   }
 }

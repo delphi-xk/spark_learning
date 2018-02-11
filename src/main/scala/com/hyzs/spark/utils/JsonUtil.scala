@@ -22,9 +22,10 @@ object JsonUtil {
     mapper.writeValueAsString(value)
   }
 
-  //def toMap[V](json:String)(implicit m: Manifest[V]) = fromJson[Map[String,V]](json)
 
-/*  def fromJson[T](json:String)(implicit m : Manifest[T]): T = {
+/*  def toMap[V](json:String)(implicit m: Manifest[V]) = fromJson[Map[String,V]](json)
+
+  def fromJson[T](json:String)(implicit m : Manifest[T]): T = {
     mapper.readValue[T](json)
   }*/
 }
