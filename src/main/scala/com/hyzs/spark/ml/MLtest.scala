@@ -44,6 +44,8 @@ object MLtest {
   val libsvmPath = "/hyzs/data/test_libsvm"
   val indexPath = "/hyzs/data/test_index"
   val namePath = "/hyzs/data/test_name"
+  val resultPath = "/hyzs/data/result"
+  val fileName = "part-00000"
 
   def convertDFtoLibsvm(): Unit = {
     /*    val df = sqlContext.sql("select * from test_data")
@@ -173,12 +175,15 @@ object MLtest {
     df.selectExpr(remainCols ++: replaceExprs: _*)
   }
 
-  def dropOldCols(df:DataFrame, stringCols:Seq[String], timeCols:Seq[String], numberCols:Seq[String]): DataFrame = {
+  def dropOldCols(df:DataFrame,
+                  stringCols:Seq[String],
+                  timeCols:Seq[String],
+                  numberCols:Seq[String]): Option[DataFrame] = {
     // add string index start with 1
     val strExprs = stringCols.map(col => s" (${col}_indexer + 1) as $col")
     val timeExprs = timeCols.map(col => s" ${col}_stamp as $col")
     val numberExprs = numberCols.map(col =>  s" ${col}_number as $col")
-    df.selectExpr(strExprs ++: timeExprs ++: numberExprs :_*)
+    Some(df.selectExpr(strExprs ++: timeExprs ++: numberExprs :_*))
   }
 
   def castTimestampFuc(time:String): Long = {
@@ -290,7 +295,7 @@ object MLtest {
   }
 
   def main(args: Array[String]): Unit = {
-    if(args.length >0 && args(0) == "import"){
+    if(args.length >1 && args(1) == "import"){
       import_data()
     }
     val df = sqlContext.table("hyzs.jd_test_data").drop(originalKey)
@@ -303,10 +308,10 @@ object MLtest {
     var stringCols = Seq[String]()
     var timeCols = Seq[String]()
     var numberCols = Seq[String]()
-    var result: DataFrame = null
+    var result: Option[DataFrame] = None
     if(args.length >0 && args(0) == "predict"){
       val pipeline = Pipeline.load(modelPath)
-      result = pipeline.fit(data).transform(data)
+      result = Some(pipeline.fit(data).transform(data))
 
       val objList = readObj(objPath)
       stringCols = objList.filter(obj => obj.value == Params.STRING_TYPE).map(_.fieldName)
@@ -328,7 +333,7 @@ object MLtest {
       if(checkHDFileExist(modelPath))dropHDFiles(modelPath)
       pipeline.save(modelPath)
 
-      result = pipeline.fit(data).transform(data)
+      result = Some(pipeline.fit(data).transform(data))
 
       saveRdd(objRdd, objPath)
       saveRdd(nameRdd, namePath)
@@ -336,23 +341,27 @@ object MLtest {
 
     val stampUdf = udf(castTimestampFuc _)
     for(col <- timeCols){
-      result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
+      result = Some(result.get.withColumn(s"${col}_stamp", stampUdf(result.get(col))))
     }
 
     for(col <- numberCols){
-      result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
+      result = Some(result.get.withColumn(s"${col}_number", result.get(col).cast(DoubleType)))
     }
-    result = dropOldCols(result, stringCols, timeCols, numberCols)
-    result = result.selectExpr(dataColsArray:_*)
-    saveTable(result, "jd_test_result")
+    result = dropOldCols(result.get, stringCols, timeCols, numberCols)
+    result = Some(result.get.selectExpr(dataColsArray:_*))
+    saveTable(result.get, "jd_test_result")
 
     // zip rdd should have THE SAME partitions
-    val libsvmff = result.rdd.zip(indexRdd).map{
+    val libsvmff = result.get.rdd.zip(indexRdd).map{
       case (row, i) => castLibsvmString(i, row)
     }
 
     saveRdd(libsvmff, libsvmPath)
     saveRdd(indexRdd, indexPath)
+
+    mkHDdir(resultPath)
+    moveHDFile(s"$libsvmPath/$fileName", s"$resultPath/test.libsvm")
+    moveHDFile(s"$indexPath/$fileName", s"$resultPath/test.index")
 
   }
 }
