@@ -19,6 +19,7 @@ object JDDataProcess {
 
   val originalKey = "user_id"
   val key = "user_id_md5"
+  import sqlContext.implicits._
 
   def createDFfromCsv(path: String, delimiter: String = "\\t"): DataFrame = {
     val data = sc.textFile(path)
@@ -182,6 +183,22 @@ object JDDataProcess {
     //newResult.first()
     println(s"xkqyj joined table: $tableName , ${newResult.rdd.partitions.size}")
     newResult
+  }
+
+  def importLabelTable(filePath:String):DataFrame = {
+    val header = Array(key, "label")
+    createDFfromRawCsv(header, filePath, "\\t")
+  }
+
+  // generate multiple label table
+  def multiLabelProcess(labelRange:Int, labelTable:DataFrame): Unit = {
+    for(index <- 1 to labelRange){
+      val label_i = labelTable.select(
+        $"pin".as(key),
+        when($"label" === s"$index","1").otherwise("0").as("label"))
+      saveTable(label_i, s"label_$index")
+    }
+
   }
 
   def main(args: Array[String]): Unit = {

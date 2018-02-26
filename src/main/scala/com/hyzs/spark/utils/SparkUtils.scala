@@ -30,7 +30,6 @@ object SparkUtils {
   //  .registerModule(DefaultScalaModule)
   val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)
 
-
   def checkHDFileExist(filePath: String): Boolean = {
     val path = new Path(filePath)
     fs.exists(path)

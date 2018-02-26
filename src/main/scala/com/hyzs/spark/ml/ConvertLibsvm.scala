@@ -1,8 +1,6 @@
 package com.hyzs.spark.ml
 
 
-
-
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.feature.{IndexToString, StringIndexer, StringIndexerModel, VectorAssembler}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -23,17 +21,16 @@ import java.math.BigDecimal
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
-import com.hyzs.spark.bean.BaseObj
+import com.hyzs.spark.bean._
+
 
 /**
   * Created by XIANGKUN on 2017/12/5.
   */
 
-case class Ob1(key:Int, value:String, fieldName:String) extends BaseObj
-case class Ob2(key:Int, value:String, fieldName:String, map:Map[String,Int] ) extends BaseObj
-case class StructInfo(index:Int, fieldName:String, fieldType:String)
 
-object MLtest {
+
+object ConvertLibsvm {
 
 
   val originalKey = "user_id"
