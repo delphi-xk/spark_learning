@@ -11,63 +11,13 @@ import org.apache.spark.ml.feature.{MinMaxScaler, VectorAssembler}
 import org.apache.spark.mllib.linalg.{Matrices, Vector}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive._
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.apache.spark.{SparkConf, SparkContext}
+import com.hyzs.spark.utils.SparkUtils._
 
 object JDDataProcess {
 
   val originalKey = "user_id"
   val key = "user_id_md5"
   import sqlContext.implicits._
-
-  def createDFfromCsv(path: String, delimiter: String = "\\t"): DataFrame = {
-    val data = sc.textFile(path)
-    val header = data.first()
-    val content = data.filter( line => line != header)
-    val cols = header.split(delimiter).map( col => StructField(col, StringType))
-    val rows = content.map( lines => lines.split(delimiter, -1))
-      .filter(row => row.length == cols.length)
-      .map(fields => Row(fields: _*))
-    val struct = StructType(cols)
-    sqlContext.createDataFrame(rows, struct)
-  }
-
-  // filter malformed data
-  def createDFfromRawCsv(header: Array[String], path: String, delimiter: String = ","): DataFrame = {
-    val data = sc.textFile(path)
-    val cols = header.map( col => StructField(col, StringType))
-    val rows = data.map( lines => lines.split(delimiter, -1))
-        .filter(row => row.length == cols.length)
-        .map(fields => Row(fields: _*))
-      val struct = StructType(cols)
-      sqlContext.createDataFrame(rows, struct)
-  }
-
-  def createDFfromSeparateFile(headerPath: String, dataPath: String,
-                               headerSplitter: String=",", dataSplitter: String="\\t"): DataFrame = {
-    //println(s"header path: ${headerPath}, data path: ${dataPath}")
-    val header = sc.textFile(headerPath)
-    val fields = header.first().split(headerSplitter)
-    createDFfromRawCsv(fields, dataPath, dataSplitter)
-  }
-
-  def createDFfromBadFile(headerPath: String, dataPath: String,
-                          headerSplitter: String=",", dataSplitter: String="\\t"): DataFrame = {
-    val headerFile = sc.textFile(headerPath)
-    val dataFile = sc.textFile(dataPath)
-    val header = headerFile.first().split(headerSplitter)
-          .map( col => StructField(col, StringType))
-    val rows = dataFile.filter(row => !row.isEmpty)
-      .map( (row:String) => {
-        val arrs = row.split("\\t", -1)
-        arrs(0) +: arrs(1) +: arrs(2).split(",",-1)
-    })
-      .filter( arr => arr.length <= header.length)
-      .map(fields => Row(fields: _*))
-    val struct = StructType(header)
-    sqlContext.createDataFrame(rows, struct)
-  }
 
   def processHis(df: DataFrame): DataFrame = {
     df.groupBy(key, originalKey)

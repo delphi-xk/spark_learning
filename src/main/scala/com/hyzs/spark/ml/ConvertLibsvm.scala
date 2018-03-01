@@ -212,7 +212,7 @@ object ConvertLibsvm {
   def saveRdd(rdd:RDD[String], savePath:String): Unit = {
     if(checkHDFileExist(savePath))
       dropHDFiles(savePath)
-    rdd.coalesce(1, shuffle = true).saveAsTextFile(savePath)
+    rdd.coalesce(1, true).saveAsTextFile(savePath)
   }
 
   def import_data(): Unit = {
@@ -229,6 +229,9 @@ object ConvertLibsvm {
     val struct = StructType(header)
     val table = sqlContext.createDataFrame(data, struct)
     saveTable(table, "jd_test_data")
+
+    val label = createDFfromRawCsv(Array(key,"label"), "/hyzs/test/test.index")
+    saveTable(label, "jd_test_label")
   }
 
   def buildObjRdd(dataSchema:StructType,
@@ -255,13 +258,14 @@ object ConvertLibsvm {
       }
       objList += obj
     }
-    val objRdd = sc.parallelize(objList).mapPartitions( objs => {
+    val objRdd = sc.parallelize(objList).coalesce(1, true).sortBy(obj => obj.key)
+    val objStr = objRdd.mapPartitions( objs => {
       val mapper = new ObjectMapper
       mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
       mapper.registerModule(DefaultScalaModule)
       objs.map(obj => mapper.writeValueAsString(obj))
     })
-    objRdd
+    objStr
 
 /*    val resString = objList.map( obj => {
       broadMapper.value.registerModule(DefaultScalaModule)
@@ -272,7 +276,7 @@ object ConvertLibsvm {
   }
 
   def readObj(filePath:String): Array[Ob1] = {
-    val objRdd = sc.textFile(s"${filePath}/part-00000")
+    val objRdd = sc.textFile(s"$filePath/part-00000")
     val objList = objRdd.mapPartitions({ records =>
       val mapper = new ObjectMapper
       mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -302,16 +306,20 @@ object ConvertLibsvm {
     val namePath = s"${taskPath}name"
     val resultPath = s"${taskPath}result"
 
-
     if(args.length >1 && args(1) == "import"){
       import_data()
     }
-    val df = sqlContext.table("hyzs.jd_test_data").drop(originalKey)
+    val sourceData = sqlContext.table("hyzs.jd_test_data").drop(originalKey)
+    val allLabel = sqlContext.table("hyzs.jd_test_label")
+    // filter label based on source data
+    val fullData = allLabel.join(sourceData, Seq(key), "right")
 
-    val indexRdd = df.select(key).rdd.map(row => row.getString(0))
-    val nameRdd = sc.makeRDD[String](df.columns)
-    val data = df.drop(key).na.fill("0")
+    val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row.getString(0))
+    val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row.getString(0))
+    val data = fullData.drop(key).drop("label").na.fill("0")
       .na.replace("*", Map("" -> "0", "null" -> "0"))
+    val nameRdd = sc.makeRDD[String](sourceData.columns)
+
     val dataColsArray = data.columns
     var stringCols = Seq[String]()
     var timeCols = Seq[String]()
@@ -360,7 +368,7 @@ object ConvertLibsvm {
     saveTable(result.get, "jd_test_result")
 
     // zip rdd should have THE SAME partitions
-    val libsvmff = result.get.rdd.zip(indexRdd).map{
+    val libsvmff = result.get.rdd.zip(labelRdd).map{
       case (row, i) => castLibsvmString(i, row)
     }
 

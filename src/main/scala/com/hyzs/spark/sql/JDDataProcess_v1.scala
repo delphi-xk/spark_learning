@@ -14,6 +14,7 @@ import org.apache.spark.sql.hive._
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 import org.apache.spark.storage.StorageLevel
+import com.hyzs.spark.utils.SparkUtils._
 
 object JDDataProcess_v1 {
   val conf = new SparkConf().setAppName("DataProcess")
@@ -60,37 +61,6 @@ object JDDataProcess_v1 {
       .write
       .option("path",path)
       .saveAsTable(s"hyzs.$tableName")
-  }
-  
-  def createDFfromCsv(path: String, delimiter: String = "\\t"): DataFrame = {
-    val data = sc.textFile(path)
-    val header = data.first()
-    val content = data.filter( line => line != header)
-    val cols = header.split(delimiter).map( col => StructField(col, StringType))
-    val rows = content.map( lines => lines.split(delimiter))
-      .filter(row => row.length == cols.length)
-      .map(fields => Row(fields: _*))
-    val struct = StructType(cols)
-    sqlContext.createDataFrame(rows, struct)
-  }
-
-  // filter malformed data
-  def createDFfromRawCsv(header: Array[String], path: String, delimiter: String = ","): DataFrame = {
-    val data = sc.textFile(path, partitionNums)
-    val cols = header.map( col => StructField(col, StringType))
-    val rows = data.map( lines => lines.split(delimiter))
-        .filter(row => row.length <= cols.length)
-        .map(fields => Row(fields: _*))
-      val struct = StructType(cols)
-      sqlContext.createDataFrame(rows, struct)
-  }
-
-  def createDFfromSeparateFile(headerPath: String, dataPath: String,
-                               headerSplitter: String=",", dataSplitter: String="\\t"): DataFrame = {
-    //println(s"header path: ${headerPath}, data path: ${dataPath}")
-    val header = sc.textFile(headerPath)
-    val fields = header.first().split(headerSplitter)
-    createDFfromRawCsv(fields, dataPath, dataSplitter)
   }
 
   def processHis(df: DataFrame): DataFrame = {
