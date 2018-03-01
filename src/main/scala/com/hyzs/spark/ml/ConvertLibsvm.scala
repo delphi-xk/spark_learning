@@ -309,7 +309,7 @@ object ConvertLibsvm {
     if(args.length >1 && args(1) == "import"){
       import_data()
     }
-    val sourceData = sqlContext.table("hyzs.jd_test_data").drop(originalKey)
+    val sourceData = sqlContext.table(tableName).drop(originalKey)
     val allLabel = sqlContext.table("hyzs.jd_test_label")
     // filter label based on source data
     val fullData = allLabel.join(sourceData, Seq(key), "right")
@@ -376,9 +376,9 @@ object ConvertLibsvm {
     saveRdd(indexRdd, indexPath)
 
     mkHDdir(resultPath)
-    moveHDFile(s"$libsvmPath/$fileName", s"$resultPath/test.libsvm")
-    moveHDFile(s"$indexPath/$fileName", s"$resultPath/test.index")
-
+    moveHDFile(s"$libsvmPath/$fileName", s"$resultPath/$tableName.libsvm")
+    moveHDFile(s"$indexPath/$fileName", s"$resultPath/$tableName.index")
+    moveHDFile(s"$objPath/$fileName", s"$resultPath/$tableName.obj")
   }
 }
 
