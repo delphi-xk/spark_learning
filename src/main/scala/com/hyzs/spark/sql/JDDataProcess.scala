@@ -186,7 +186,7 @@ object JDDataProcess {
   }
 
   def importLabelTable(filePath:String):DataFrame = {
-    val header = Array(key, "label")
+    val header = Array("phone", "label", key)
     createDFfromRawCsv(header, filePath, "\\t")
   }
 

@@ -3,7 +3,6 @@ package com.hyzs.spark.ml
 
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.feature.{IndexToString, StringIndexer, StringIndexerModel, VectorAssembler}
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -20,7 +19,6 @@ import java.math.BigDecimal
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
 import com.hyzs.spark.bean._
 
 
@@ -35,15 +33,8 @@ object ConvertLibsvm {
 
   val originalKey = "user_id"
   val key = "user_id_md5"
-
-  val objPath = "/hyzs/data/test_obj"
-  val modelPath = "/hyzs/data/test_model"
-  val libsvmPath = "/hyzs/data/test_libsvm"
-  val indexPath = "/hyzs/data/test_index"
-  val namePath = "/hyzs/data/test_name"
-  val resultPath = "/hyzs/data/result"
   val fileName = "part-00000"
-
+  val maxLabelLength = 10
   def convertDFtoLibsvm(): Unit = {
     /*    val df = sqlContext.sql("select * from test_data")
         val labelArray = df.select("jdmall_user_p0003").distinct.map(_.getString(0)).collect
@@ -221,7 +212,7 @@ object ConvertLibsvm {
   def saveRdd(rdd:RDD[String], savePath:String): Unit = {
     if(checkHDFileExist(savePath))
       dropHDFiles(savePath)
-    rdd.coalesce(1).saveAsTextFile(savePath)
+    rdd.coalesce(1, shuffle = true).saveAsTextFile(savePath)
   }
 
   def import_data(): Unit = {
@@ -245,7 +236,12 @@ object ConvertLibsvm {
     val objList:ListBuffer[BaseObj] = new ListBuffer
     objList += Ob1(0, Params.NO_TYPE, key)
     val indexerMap: Map[String,Map[String,Int]] = indexerArray.map{ case (name,model) =>
-      (name, model.labels.zip(1 to model.labels.length).toMap)
+      if(model.labels.length<maxLabelLength)
+        (name, model.labels.zip(1 to model.labels.length).toMap)
+      else{
+        val labels = model.labels.slice(0, maxLabelLength)
+        (name, labels.zip(1 to maxLabelLength).toMap)
+      }
     }.toMap
     (1 to dataSchema.length).zip(dataSchema).foreach{ case (index, field) =>
       val obj = field.dataType match {
@@ -259,26 +255,30 @@ object ConvertLibsvm {
       }
       objList += obj
     }
-    val resString = objList.map( obj => {
+    val objRdd = sc.parallelize(objList).mapPartitions( objs => {
+      val mapper = new ObjectMapper
+      mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+      mapper.registerModule(DefaultScalaModule)
+      objs.map(obj => mapper.writeValueAsString(obj))
+    })
+    objRdd
+
+/*    val resString = objList.map( obj => {
       broadMapper.value.registerModule(DefaultScalaModule)
       broadMapper.value.writeValueAsString(obj)
     })
-    //println(resString(10))
-    sc.makeRDD[String](resString)
+    sc.makeRDD[String](resString)*/
+
   }
 
   def readObj(filePath:String): Array[Ob1] = {
     val objRdd = sc.textFile(s"${filePath}/part-00000")
-    val objList = objRdd.collect().map{ record =>
-/*      val mapper = new ObjectMapper()
+    val objList = objRdd.mapPartitions({ records =>
+      val mapper = new ObjectMapper
       mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
       mapper.registerModule(DefaultScalaModule)
-      val obj = mapper.readValue(record, classOf[Ob1])*/
-      broadMapper.value.registerModule(DefaultScalaModule)
-      val obj = broadMapper.value.readValue(record, classOf[Ob1])
-      //println(s"obj${obj.key}:  ${obj.value}, ${obj.fieldName}")
-      obj
-    }
+      records.map(record => mapper.readValue(record, classOf[Ob1]))
+    }).collect()
     objList
   }
 
@@ -292,6 +292,17 @@ object ConvertLibsvm {
   }
 
   def main(args: Array[String]): Unit = {
+    val tableName = "hyzs.jd_test_data"
+    val convertPath = "/hyzs/convert_data/"
+    val taskPath = s"$convertPath$tableName/"
+    val objPath = s"${taskPath}obj"
+    val modelPath = s"${taskPath}model"
+    val libsvmPath = s"${taskPath}libsvm"
+    val indexPath = s"${taskPath}index"
+    val namePath = s"${taskPath}name"
+    val resultPath = s"${taskPath}result"
+
+
     if(args.length >1 && args(1) == "import"){
       import_data()
     }
