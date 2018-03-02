@@ -56,6 +56,13 @@ object SparkUtils {
     FileUtil.copy(fs, path, fs, newPath, false, hdConf)
   }
 
+  def copyMergeHDFiles(srcFileDir:String, dstFile:String): Unit = {
+    val srcDir = new Path(srcFileDir)
+    val file = new Path(dstFile)
+    fs.delete(file, true)
+    FileUtil.copyMerge(fs, srcDir, fs, file, false, hdConf, null)
+  }
+
   def saveTable(df: DataFrame, tableName:String, dbName:String="hyzs"): Unit = {
     sqlContext.sql(s"drop table if exists $dbName.$tableName")
     val path = s"$warehouseDir$tableName"

@@ -33,7 +33,7 @@ object ConvertLibsvm {
 
   val originalKey = "user_id"
   val key = "user_id_md5"
-  val fileName = "part-00000"
+  //val fileName = "part-00000"
   val maxLabelLength = 10
   def convertDFtoLibsvm(): Unit = {
     /*    val df = sqlContext.sql("select * from test_data")
@@ -212,7 +212,7 @@ object ConvertLibsvm {
   def saveRdd(rdd:RDD[String], savePath:String): Unit = {
     if(checkHDFileExist(savePath))
       dropHDFiles(savePath)
-    rdd.coalesce(1, true).saveAsTextFile(savePath)
+    rdd.saveAsTextFile(savePath)
   }
 
   def import_data(): Unit = {
@@ -258,7 +258,9 @@ object ConvertLibsvm {
       }
       objList += obj
     }
-    val objRdd = sc.parallelize(objList).coalesce(1, true).sortBy(obj => obj.key)
+    val objRdd = sc.parallelize(objList)
+        //.coalesce(1, true)
+      .sortBy(obj => obj.key)
     val objStr = objRdd.mapPartitions( objs => {
       val mapper = new ObjectMapper
       mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -276,7 +278,7 @@ object ConvertLibsvm {
   }
 
   def readObj(filePath:String): Array[Ob1] = {
-    val objRdd = sc.textFile(s"$filePath/part-00000")
+    val objRdd = sc.textFile(filePath)
     val objList = objRdd.mapPartitions({ records =>
       val mapper = new ObjectMapper
       mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -329,7 +331,7 @@ object ConvertLibsvm {
       val pipeline = Pipeline.load(modelPath)
       result = Some(pipeline.fit(data).transform(data))
 
-      val objList = readObj(objPath)
+      val objList = readObj(s"$resultPath/$tableName.obj")
       stringCols = objList.filter(obj => obj.value == Params.STRING_TYPE).map(_.fieldName)
       timeCols = objList.filter(obj => obj.value == Params.DATE_TYPE).map(_.fieldName)
       numberCols = objList.filter(obj => obj.value == Params.NUMERIC_TYPE).map(_.fieldName)
@@ -353,6 +355,9 @@ object ConvertLibsvm {
 
       saveRdd(objRdd, objPath)
       saveRdd(nameRdd, namePath)
+      mkHDdir(resultPath)
+      copyMergeHDFiles(s"$objPath/", s"$resultPath/$tableName.obj")
+      copyMergeHDFiles(s"$namePath/", s"$resultPath/$tableName.name")
     }
 
     val stampUdf = udf(castTimestampFuc _)
@@ -368,17 +373,16 @@ object ConvertLibsvm {
     saveTable(result.get, "jd_test_result")
 
     // zip rdd should have THE SAME partitions
-    val libsvmff = result.get.rdd.zip(labelRdd).map{
+    val libsvm = result.get.rdd.zip(labelRdd).map{
       case (row, i) => castLibsvmString(i, row)
     }
 
-    saveRdd(libsvmff, libsvmPath)
+    saveRdd(libsvm, libsvmPath)
     saveRdd(indexRdd, indexPath)
-
     mkHDdir(resultPath)
-    moveHDFile(s"$libsvmPath/$fileName", s"$resultPath/$tableName.libsvm")
-    moveHDFile(s"$indexPath/$fileName", s"$resultPath/$tableName.index")
-    moveHDFile(s"$objPath/$fileName", s"$resultPath/$tableName.obj")
+    copyMergeHDFiles(s"$libsvmPath/", s"$resultPath/$tableName.libsvm")
+    copyMergeHDFiles(s"$indexPath/", s"$resultPath/$tableName.index")
+
   }
 }
 
