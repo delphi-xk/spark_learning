@@ -16,9 +16,10 @@
 ### Spark程序调试
 Spark程序最常见的坑就是关于内存的调试。  
 
-例如一个5\*100G的集群，考虑到driver和executor的1+n配置，可以设置19个executor，平均每个节点4个executor。理论上可用内存为25G，executor memory控制堆内存，考虑到`spark.yarn.executor.memory.overhead = max(384M, .07* spark.executor.memory)`，即需要0.07\*executor memory的空间作为堆外内存，分配给executor memory的内存不能超过23G。实际情况中，由于spark集群的节点上会启动一些worker deamon，会有固定的内存占用，在分配内存时最好用free来查看系统实际可用内存情况。如果使用yarn作为资源分配，也可以尽量减少起多个worker。  
+例如一个5\*100G的集群，考虑到driver和executor的1+n配置，可以设置19个executor，平均每个节点4个executor。理论上可用内存为25G，executor memory控制堆内存，考虑到`spark.yarn.executor.memory.overhead = max(384M, .07* spark.executor.memory)`，即需要0.07\*executor memory的空间作为堆外内存，分配给executor memory的内存不能超过23G。实际情况中，由于spark集群的节点上会启动一些worker deamon，会有固定的内存占用，因此最后设置的executor memory=22G。在分配内存时最好用free来查看系统实际可用内存情况。如果使用yarn作为资源分配，也可以尽量减少起多个worker。  
+如果没有考虑到集群的实际情况，分配spark程序的内存大于节点可用内存，则也会造成系统kill掉executor的进程，导致executor lost。
 
-Spark程序的executor-cores并不是系统core的概念，是spark程序抽象的运行核心，代表程序的并发速度。例如在设置`--num-executors 19 --executor-cores 3`时，程序实际并发运行的task数是19\*3=57
+Spark程序的executor-cores并不是系统core的概念，是spark程序抽象的运行核心，代表程序的并发速度。例如在设置`--num-executors 19 --executor-cores 3`时，程序实际并行运行的task数是19\*3=57
 
 
 
