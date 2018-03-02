@@ -314,8 +314,8 @@ object ConvertLibsvm {
     // filter label based on source data
     val fullData = allLabel.join(sourceData, Seq(key), "right")
 
-    val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row.getString(0))
-    val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row.getString(0))
+    val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row(0).toString)
+    val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row(0).toString)
     val data = fullData.drop(key).drop("label").na.fill("0")
       .na.replace("*", Map("" -> "0", "null" -> "0"))
     val nameRdd = sc.makeRDD[String](sourceData.columns)
