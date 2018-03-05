@@ -20,6 +20,7 @@ import java.math.BigDecimal
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.hyzs.spark.bean._
+import org.apache.spark.util.SizeEstimator
 
 
 /**
@@ -297,6 +298,7 @@ object ConvertLibsvm {
     sc.makeRDD(structArray)
   }
 
+
   def main(args: Array[String]): Unit = {
     val tableName = "hyzs.jd_test_data"
     val convertPath = "/hyzs/convert_data/"
@@ -376,6 +378,7 @@ object ConvertLibsvm {
     val libsvm = result.get.rdd.zip(labelRdd).map{
       case (row, i) => castLibsvmString(i, row)
     }
+
 
     saveRdd(libsvm, libsvmPath)
     saveRdd(indexRdd, indexPath)

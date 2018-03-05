@@ -6,10 +6,12 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FileUtil, Path}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.util.SizeEstimator
 
 
 
@@ -28,7 +30,7 @@ object SparkUtils {
   val mapper = new ObjectMapper()
   mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
   // NOTE: not serializable
-  //  .registerModule(DefaultScalaModule)
+  //  ObjectMapper.registerModule(DefaultScalaModule)
   val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)
 
   def checkHDFileExist(filePath: String): Boolean = {
@@ -118,6 +120,10 @@ object SparkUtils {
       .map(fields => Row(fields: _*))
     val struct = StructType(header)
     sqlContext.createDataFrame(rows, struct)
+  }
+
+  def estimator[T](rdd: RDD[T]): Long = {
+    SizeEstimator.estimate(rdd)
   }
 
 }
