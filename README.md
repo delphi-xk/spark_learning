@@ -20,13 +20,21 @@
 
 - 进行多表、大表的join操作时，尽量在合表前将表以连接key进行repartition操作，这样可以触发sort merge join
 - 使用cache或persist进行缓存时，尽量在执行cache后或调用被缓存数据前执行一次action（如first），以保证缓存在后面操作中生效
-- 使用mapPartitions来优化map函数内引用的外部序列化对象，如connection或其他工具lib
+- 使用mapPartitions来优化函数内引用的外部对象(不可序列化)，如connection或其他工具lib
+```
+  data.foreachPartition({ records =>
+  	val connection = new DatabaseConnection()
+  	records.foreach( record => connection. // do something )
+  })
+
+```
 - spark中使用Jackson的Json库时，可使用广播变量(broadcast variables)，或使用mapPartitions函数，对于每个partition创建一个mapper对象
 ```
   val mapper = new ObjectMapper()
   mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
   // NOTE: not serializable
-  mapper.registerModule(DefaultScalaModule)
+  // mapper.registerModule(DefaultScalaModule)
+  val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)
 ```
 
 > https://github.com/databricks/learning-spark
