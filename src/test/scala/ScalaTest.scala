@@ -3,8 +3,6 @@ import java.io._
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
-
-import com.hyzs.spark.utils.PropertyUtils
 import org.apache.commons.lang.time.DateUtils
 import org.junit.Test
 

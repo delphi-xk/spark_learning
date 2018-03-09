@@ -7,9 +7,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FileUtil, Path}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.SizeEstimator
 
@@ -19,13 +18,18 @@ import org.apache.spark.util.SizeEstimator
   * Created by Administrator on 2018/1/24.
   */
 object SparkUtils {
-  val conf: SparkConf = new SparkConf().setAppName("DataProcess")
-  val sc = new SparkContext(conf)
-  val sqlContext = new HiveContext(sc)
+
+  val spark:SparkSession = SparkSession
+    .builder()
+    .appName("Spark SQL basic example")
+    .config("spark.some.config.option", "some-value")
+    .getOrCreate()
+  val sc:SparkContext = spark.sparkContext
+  val conf:SparkConf = sc.getConf
   val hdConf: Configuration = sc.hadoopConfiguration
   val fs: FileSystem = FileSystem.get(hdConf)
 
-  val partitionNums: Int = Option(sqlContext.getConf("spark.sql.shuffle.partitions")).getOrElse("200").toInt
+  val partitionNums: Int = conf.getOption("spark.sql.shuffle.partitions").getOrElse("200").toInt
   val warehouseDir = "/hyzs/warehouse/hyzs.db/"
   val mapper = new ObjectMapper()
   mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -65,8 +69,8 @@ object SparkUtils {
     FileUtil.copyMerge(fs, srcDir, fs, file, false, hdConf, null)
   }
 
-  def saveTable(df: DataFrame, tableName:String, dbName:String="hyzs"): Unit = {
-    sqlContext.sql(s"drop table if exists $dbName.$tableName")
+  def saveTable(df: Dataset[Row], tableName:String, dbName:String="hyzs"): Unit = {
+    spark.sql(s"drop table if exists $dbName.$tableName")
     val path = s"$warehouseDir$tableName"
     if(checkHDFileExist(path))dropHDFiles(path)
     df.write
@@ -74,7 +78,7 @@ object SparkUtils {
       .saveAsTable(s"$dbName.$tableName")
   }
 
-  def createDFfromCsv(path: String, delimiter: String = "\\t"): DataFrame = {
+  def createDFfromCsv(path: String, delimiter: String = "\\t"): Dataset[Row] = {
     val data = sc.textFile(path)
     val header = data.first()
     val content = data.filter( line => line != header)
@@ -83,22 +87,22 @@ object SparkUtils {
       .filter(row => row.length == cols.length)
       .map(fields => Row(fields: _*))
     val struct = StructType(cols)
-    sqlContext.createDataFrame(rows, struct)
+    spark.createDataFrame(rows, struct)
   }
 
   // filter malformed data
-  def createDFfromRawCsv(header: Array[String], path: String, delimiter: String = ","): DataFrame = {
+  def createDFfromRawCsv(header: Array[String], path: String, delimiter: String = ","): Dataset[Row] = {
     val data = sc.textFile(path)
     val cols = header.map( col => StructField(col, StringType))
     val rows = data.map( lines => lines.split(delimiter, -1))
       .filter(row => row.length == cols.length)
       .map(fields => Row(fields: _*))
     val struct = StructType(cols)
-    sqlContext.createDataFrame(rows, struct)
+    spark.createDataFrame(rows, struct)
   }
 
   def createDFfromSeparateFile(headerPath: String, dataPath: String,
-                               headerSplitter: String=",", dataSplitter: String="\\t"): DataFrame = {
+                               headerSplitter: String=",", dataSplitter: String="\\t"): Dataset[Row] = {
     //println(s"header path: ${headerPath}, data path: ${dataPath}")
     val header = sc.textFile(headerPath)
     val fields = header.first().split(headerSplitter)
@@ -106,7 +110,7 @@ object SparkUtils {
   }
 
   def createDFfromBadFile(headerPath: String, dataPath: String,
-                          headerSplitter: String=",", dataSplitter: String="\\t"): DataFrame = {
+                          headerSplitter: String=",", dataSplitter: String="\\t"): Dataset[Row] = {
     val headerFile = sc.textFile(headerPath)
     val dataFile = sc.textFile(dataPath)
     val header = headerFile.first().split(headerSplitter)
@@ -119,7 +123,7 @@ object SparkUtils {
       .filter( arr => arr.length <= header.length)
       .map(fields => Row(fields: _*))
     val struct = StructType(header)
-    sqlContext.createDataFrame(rows, struct)
+    spark.createDataFrame(rows, struct)
   }
 
   def estimator[T](rdd: RDD[T]): Long = {

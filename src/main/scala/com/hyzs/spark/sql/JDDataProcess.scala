@@ -17,7 +17,7 @@ object JDDataProcess {
 
   val originalKey = "user_id"
   val key = "user_id_md5"
-  import sqlContext.implicits._
+  import spark.implicits._
 
   def processHis(df: DataFrame): DataFrame = {
     df.groupBy(key, originalKey)
@@ -33,7 +33,7 @@ object JDDataProcess {
   // ensure countCols can be counted(cast double)
   def labelGenerateProcess(taskName:String, countCols: Array[String], weight: Array[Double]): DataFrame = {
     if( countCols.length == weight.length){
-      val allData = sqlContext.sql("select * from hyzs.all_data")
+      val allData = spark.sql("select * from hyzs.all_data")
       val selectCols = countCols.map( col => s"cast ($col as double) $col")
       val label_data = processEmpty(allData, countCols)
         .selectExpr(key +: selectCols : _*)
@@ -125,7 +125,7 @@ object JDDataProcess {
   }
 
   def joinTableProcess(oldResult: DataFrame, tableName: String): DataFrame ={
-    val newTable = sqlContext.sql(s"select * from hyzs.$tableName")
+    val newTable = spark.sql(s"select * from hyzs.$tableName")
     val newResult = oldResult.join(newTable, Seq(key), "left_outer")
       //.dropDuplicates(Seq(key))
       //.repartition(partitionNums, col(key))
@@ -153,19 +153,19 @@ object JDDataProcess {
 
   def main(args: Array[String]): Unit = {
 
-    sqlContext.sql("create database IF NOT EXISTS hyzs ")
+    spark.sql("create database IF NOT EXISTS hyzs ")
 
-    val data = sc.getConf.get("spark.processJob.dataPath")
-    val header = sc.getConf.get("spark.processJob.headerPath")
-    val tableStr = sc.getConf.get("spark.processJob.fileNames")
-    val sampleRatio = sc.getConf.get("spark.processJob.SampleRatio")
+    val data = conf.get("spark.processJob.dataPath")
+    val header = conf.get("spark.processJob.headerPath")
+    val tableStr = conf.get("spark.processJob.fileNames")
+    val resTable = Option(conf.get("spark.processJob.resultTable")).getOrElse("all_data")
 
     val tables = tableStr.split(",")
     // check and filter if file exists
     val validTables = tables.filter(
       tableName => checkHDFileExist(s"$header$tableName.txt") && checkHDFileExist(s"$data$tableName.txt"))
 
-    if(args.length >0 && args(0) == "import_business") {
+    if(args.length >0 && (args(0) == "import_business"||args(0) == "import_all") ) {
       // process business table, result start with hisTable
       val tableName = validTables(0)
       val headerPath=s"$header$tableName.txt"
@@ -176,7 +176,7 @@ object JDDataProcess {
       saveTable(hisTable, validTables(0))
     }
 
-    if(args.length > 1 && args(1) == "import_info") {
+    if(args.length >0 && (args(0) == "import_info")||args(0) == "import_all") {
       for(tableName <- validTables.drop(1)){
         val headerPath=s"$header$tableName.txt"
         val dataPath=s"$data$tableName.txt"
@@ -187,22 +187,25 @@ object JDDataProcess {
       }
     }
 
-    // big table join process
-    var result = sqlContext.sql(s"select * from hyzs.${validTables(0)}")
-     // .sample(withReplacement=false, sampleRatio.toDouble)
-      .repartition(numPartitions = partitionNums, col(key))
+    var result: Option[Dataset[Row]] = None
+    if (args.length>1 && args(1) == "skip_join") {
+      result = Some(spark.table(s"hyzs.$resTable"))
+    } else {
+      // big table join process
+      result = Some(spark.sql(s"select * from hyzs.${validTables(0)}")
+        // .sample(withReplacement=false, sampleRatio.toDouble)
+        .repartition(numPartitions = partitionNums, col(key)))
 
-    for(tableName <- validTables.drop(1)) {
-      result = joinTableProcess(result, tableName)
+      for(tableName <- validTables.drop(1)) {
+        result = Some(joinTableProcess(result.get, tableName))
+      }
     }
-
-    result.repartition(numPartitions = partitionNums)
-    saveTable(result, "all_data")
+    saveTable(result.get, "all_data")
     // if only for prediction, not need to split data or generate label table
     if (args.length>1 && args(1) == "predict"){
-      predictModelData(result)
+      predictModelData(result.get)
     } else {
-      trainModelData(result)
+      trainModelData(result.get)
     }
 
   }

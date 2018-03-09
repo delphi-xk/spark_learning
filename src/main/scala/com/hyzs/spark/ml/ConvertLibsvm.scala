@@ -7,14 +7,13 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import com.hyzs.spark.utils.SparkUtils._
-import com.hyzs.spark.utils.{BaseUtil, InferSchema, JsonUtil, Params, SparkUtils}
+import com.hyzs.spark.utils.{BaseUtil, JsonUtil, Params, SparkUtils}
 import java.math.BigDecimal
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -27,8 +26,6 @@ import org.apache.spark.util.SizeEstimator
   * Created by XIANGKUN on 2017/12/5.
   */
 
-
-
 object ConvertLibsvm {
 
 
@@ -37,41 +34,8 @@ object ConvertLibsvm {
   //val fileName = "part-00000"
   val maxLabelLength = 10
   def convertDFtoLibsvm(): Unit = {
-    /*    val df = sqlContext.sql("select * from test_data")
-        val labelArray = df.select("jdmall_user_p0003").distinct.map(_.getString(0)).collect
-        val labelMap = labelArray.zipWithIndex.toMap*/
-
-    /*    val label = sqlContext.sql("select * from consume_label limit 100")
-        val test = label.join(df, Seq("user_id"), "left_outer")
-        val rdd_test: RDD[Vector] = test.rdd.map( row => Vectors.dense(row.getDouble(0), row.getDouble(2)) )*/
-
-    /*   val indexer = new StringIndexer()
-          .setInputCol("jdmall_user_p0003")
-          .setOutputCol("p0003_indexer")
-          .setHandleInvalid("skip")
-          .fit(df)
-          val converter = new IndexToString()
-             .setInputCol("p0003_indexer")
-             .setOutputCol("p0003_converter")
-             .setLabels(indexer.labels)
-           val indexer2 = new StringIndexer()
-             .setInputCol("mkt_schd_p0001328")
-             .setOutputCol("p0001328_indexer")
-             .setHandleInvalid("skip")
-             .fit(df)
-           val converter2 = new IndexToString()
-             .setInputCol("p0001328_indexer")
-             .setOutputCol("p0001328_converter")
-             .setLabels(indexer2.labels)
-
-           val pipeline = new Pipeline()
-             .setStages(Array(indexer, indexer2, converter, converter2))
-             .fit(df)
-           val res = pipeline.transform(df).select("user_id",
-             "jdmall_user_p0003","p0003_indexer", "p0003_converter",
-             "mkt_schd_p0001328","p0001328_indexer","p0001328_converter")*/
-
-    val df = sqlContext.sql("select * from test_data")
+    
+    val df = spark.sql("select * from test_data")
 
     val key = "user_id"
     //val colCounts = df.columns.map(df.select(_).distinct().count())
@@ -93,7 +57,7 @@ object ConvertLibsvm {
   }
 
   def convertToLibsvm(): Unit ={
-    val df = sqlContext.sql("select * from test_data")
+    val df = spark.sql("select * from test_data")
     val cols = df.columns.drop(1)
     val indexerArray = cols
       .map(col => getIndexers(df, col))
@@ -122,7 +86,7 @@ object ConvertLibsvm {
 
   }
 
-  def getIndexers(df: DataFrame, col: String): (String, StringIndexerModel) = {
+  def getIndexers(df: Dataset[Row], col: String): (String, StringIndexerModel) = {
     val indexer = new StringIndexer()
       .setInputCol(col)
       .setOutputCol(s"${col}_indexer")
@@ -132,7 +96,7 @@ object ConvertLibsvm {
   }
 
 
-  def castStringType(df:DataFrame, col:String): (DataFrame, StringIndexerModel) = {
+  def castStringType(df:Dataset[Row], col:String): (Dataset[Row], StringIndexerModel) = {
     val indexer = new StringIndexer()
       .setInputCol(col)
       .setOutputCol(s"${col}_indexer")
@@ -145,7 +109,7 @@ object ConvertLibsvm {
 
   val indexerArray = new ArrayBuffer[StringIndexerModel]
 
-  def castDFdtype(df:DataFrame, colName:String, dType:DataType): DataFrame = {
+  def castDFdtype(df:Dataset[Row], colName:String, dType:DataType): Dataset[Row] = {
     assert(df.columns contains colName)
     val df_new = dType match {
       case StringType =>
@@ -158,16 +122,16 @@ object ConvertLibsvm {
     df_new
   }
 
-  def replaceIndexedCols(df:DataFrame, cols:Seq[String]): DataFrame = {
+  def replaceIndexedCols(df:Dataset[Row], cols:Seq[String]): Dataset[Row] = {
     val remainCols = df.columns diff cols
     val replaceExprs = cols.map( col => s" ${col}_indexer as $col")
     df.selectExpr(remainCols ++: replaceExprs: _*)
   }
 
-  def dropOldCols(df:DataFrame,
+  def dropOldCols(df:Dataset[Row],
                   stringCols:Seq[String],
                   timeCols:Seq[String],
-                  numberCols:Seq[String]): Option[DataFrame] = {
+                  numberCols:Seq[String]): Option[Dataset[Row]] = {
     // add string index start with 1
     val strExprs = stringCols.map(col => s" (${col}_indexer + 1) as $col")
     val timeExprs = timeCols.map(col => s" ${col}_stamp as $col")
@@ -192,7 +156,7 @@ object ConvertLibsvm {
     resString.toString()
   }
 
-  def saveLibsvmFile_old(df:DataFrame): Unit = {
+  def saveLibsvmFile_old(df:Dataset[Row]): Unit = {
     val assembler = new VectorAssembler()
       .setInputCols(df.columns)
       .setOutputCol("features")
@@ -228,7 +192,7 @@ object ConvertLibsvm {
       .filter( arr => arr.length <= header.length)
       .map(fields => Row(fields: _*))
     val struct = StructType(header)
-    val table = sqlContext.createDataFrame(data, struct)
+    val table = spark.createDataFrame(data, struct)
     saveTable(table, "jd_test_data")
 
     val label = createDFfromRawCsv(Array(key,"label"), "/hyzs/test/test.index")
@@ -313,8 +277,8 @@ object ConvertLibsvm {
     if(args.length >1 && args(1) == "import"){
       import_data()
     }
-    val sourceData = sqlContext.table(tableName).drop(originalKey)
-    val allLabel = sqlContext.table("hyzs.jd_test_label")
+    val sourceData = spark.table(tableName).drop(originalKey)
+    val allLabel = spark.table("hyzs.jd_test_label")
     // filter label based on source data
     val fullData = allLabel.join(sourceData, Seq(key), "right")
 
@@ -328,7 +292,7 @@ object ConvertLibsvm {
     var stringCols = Seq[String]()
     var timeCols = Seq[String]()
     var numberCols = Seq[String]()
-    var result: Option[DataFrame] = None
+    var result: Option[Dataset[Row]] = None
     if(args.length >0 && args(0) == "predict"){
       val pipeline = Pipeline.load(modelPath)
       result = Some(pipeline.fit(data).transform(data))
