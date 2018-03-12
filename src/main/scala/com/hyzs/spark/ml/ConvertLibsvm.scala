@@ -303,7 +303,7 @@ object ConvertLibsvm {
       numberCols = objList.filter(obj => obj.value == Params.NUMERIC_TYPE).map(_.fieldName)
 
     } else if(args.length >0 && args(0) == "train"){
-      val dataSchema = InferSchema.inferSchema(data)
+      val dataSchema: StructType = null
       val stringSchema = dataSchema.filter(field => field.dataType == StringType)
       val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
 

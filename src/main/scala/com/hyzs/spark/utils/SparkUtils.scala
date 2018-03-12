@@ -18,11 +18,12 @@ import org.apache.spark.util.SizeEstimator
   * Created by Administrator on 2018/1/24.
   */
 object SparkUtils {
-
+  val warehouseDir = "/hyzs/warehouse/"
   val spark:SparkSession = SparkSession
     .builder()
     .appName("Spark SQL basic example")
-    .config("spark.some.config.option", "some-value")
+    .config("spark.sql.warehouse.dir", warehouseDir)
+    .enableHiveSupport()
     .getOrCreate()
   val sc:SparkContext = spark.sparkContext
   val conf:SparkConf = sc.getConf
@@ -30,7 +31,7 @@ object SparkUtils {
   val fs: FileSystem = FileSystem.get(hdConf)
 
   val partitionNums: Int = conf.getOption("spark.sql.shuffle.partitions").getOrElse("200").toInt
-  val warehouseDir = "/hyzs/warehouse/hyzs.db/"
+
   val mapper = new ObjectMapper()
   mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
   // NOTE: not serializable
@@ -124,6 +125,21 @@ object SparkUtils {
       .map(fields => Row(fields: _*))
     val struct = StructType(header)
     spark.createDataFrame(rows, struct)
+  }
+
+  def readCsv(path:String): Dataset[Row] = {
+    spark.read
+      .option("header", "true")
+      .option("delimiter", ",")
+      .option("inferSchema", "true")
+      .csv(path)
+
+  }
+
+  def saveHiveTable(df: Dataset[Row], tableName:String, dbName:String="hyzs"): Unit = {
+    spark.sql(s"drop table if exists $dbName.$tableName")
+    df.write
+      .saveAsTable(s"$dbName.$tableName")
   }
 
   def estimator[T](rdd: RDD[T]): Long = {
