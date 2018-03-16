@@ -18,11 +18,11 @@ import org.apache.spark.util.SizeEstimator
   * Created by Administrator on 2018/1/24.
   */
 object SparkUtils {
-  val warehouseDir = "/hyzs/warehouse/"
+  val warehouseDir = "/user/hive/warehouse/"
   val spark:SparkSession = SparkSession
     .builder()
     .appName("Spark SQL basic example")
-    .config("spark.sql.warehouse.dir", warehouseDir)
+    //.config("spark.sql.warehouse.dir", warehouseDir)
     .enableHiveSupport()
     .getOrCreate()
   val sc:SparkContext = spark.sparkContext
@@ -72,10 +72,9 @@ object SparkUtils {
 
   def saveTable(df: Dataset[Row], tableName:String, dbName:String="hyzs"): Unit = {
     spark.sql(s"drop table if exists $dbName.$tableName")
-    val path = s"$warehouseDir$tableName"
+    val path = s"$warehouseDir$dbName.db/$tableName"
     if(checkHDFileExist(path))dropHDFiles(path)
     df.write
-      .option("path",path)
       .saveAsTable(s"$dbName.$tableName")
   }
 
@@ -134,12 +133,6 @@ object SparkUtils {
       .option("inferSchema", "true")
       .csv(path)
 
-  }
-
-  def saveHiveTable(df: Dataset[Row], tableName:String, dbName:String="hyzs"): Unit = {
-    spark.sql(s"drop table if exists $dbName.$tableName")
-    df.write
-      .saveAsTable(s"$dbName.$tableName")
   }
 
   def estimator[T](rdd: RDD[T]): Long = {

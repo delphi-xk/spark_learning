@@ -11,7 +11,7 @@ object NewDataProcess {
 
   def importData(): Unit = {
     val features = readCsv("/hyzs/test_data/feature_table.csv")
-    saveHiveTable(features, "all_data")
+    saveTable(features, "all_data")
   }
 
   def main(args: Array[String]): Unit = {
