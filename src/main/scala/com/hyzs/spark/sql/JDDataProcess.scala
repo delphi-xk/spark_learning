@@ -180,7 +180,7 @@ object JDDataProcess {
       for(tableName <- validTables.drop(1)){
         val headerPath=s"$header$tableName.txt"
         val dataPath=s"$data$tableName.txt"
-        val table = createDFfromBadFile(headerPath=headerPath, dataPath=dataPath)
+        val table = createDFfromBadFile(headerPath=headerPath, dataPath=dataPath, logPath = tableName)
            .drop(originalKey)
            .repartition(numPartitions = partitionNums, col(key))
         saveTable(table, tableName)

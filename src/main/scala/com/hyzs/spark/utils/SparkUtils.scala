@@ -31,7 +31,7 @@ object SparkUtils {
   val fs: FileSystem = FileSystem.get(hdConf)
 
   val partitionNums: Int = conf.getOption("spark.sql.shuffle.partitions").getOrElse("200").toInt
-
+  val invalidRowPath = "/hyzs/invalidRows/"
   val mapper = new ObjectMapper()
   mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
   // NOTE: not serializable
@@ -110,7 +110,8 @@ object SparkUtils {
   }
 
   def createDFfromBadFile(headerPath: String, dataPath: String,
-                          headerSplitter: String=",", dataSplitter: String="\\t"): Dataset[Row] = {
+                          headerSplitter: String=",", dataSplitter: String="\\t", logPath:String): Dataset[Row] = {
+
     val headerFile = sc.textFile(headerPath)
     val dataFile = sc.textFile(dataPath)
     val header = headerFile.first().split(headerSplitter)
@@ -120,10 +121,18 @@ object SparkUtils {
         val arrs = row.split("\\t", -1)
         arrs(0) +: arrs(1) +: arrs(2).split(",",-1)
       })
-      .filter( arr => arr.length <= header.length)
+    val validRow = rows
+      .filter( arr => arr.length == header.length)
       .map(fields => Row(fields: _*))
+
+    dropHDFiles(s"$invalidRowPath$logPath")
+    val invalidRows = rows.filter( row => row.length != header.length)
+      .map(row => s"invalid row size: ${row.length}, content: ${row.mkString(",")}")
+    invalidRows.saveAsTextFile(s"$invalidRowPath$logPath")
+
     val struct = StructType(header)
-    spark.createDataFrame(rows, struct)
+    spark.createDataFrame(validRow, struct)
+
   }
 
   def readCsv(path:String): Dataset[Row] = {
