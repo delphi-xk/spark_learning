@@ -280,11 +280,13 @@ object ConvertLibsvm {
     val sourceData = spark.table(tableName).drop(originalKey)
     val allLabel = spark.table("hyzs.jd_test_label")
     // filter label based on source data
-    val fullData = allLabel.join(sourceData, Seq(key), "right")
+    val fullData = allLabel.join(sourceData, Seq(key), "left")
 
     val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row(0).toString)
     val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row(0).toString)
-    val data = fullData.drop(key).drop("label").na.fill("0")
+    val data = fullData.drop(key).drop("label")
+      .na.fill("0.0")
+      .na.fill(0.0)
       .na.replace("*", Map("" -> "0", "null" -> "0"))
     val nameRdd = sc.makeRDD[String](sourceData.columns)
 
@@ -303,7 +305,8 @@ object ConvertLibsvm {
       numberCols = objList.filter(obj => obj.value == Params.NUMERIC_TYPE).map(_.fieldName)
 
     } else if(args.length >0 && args(0) == "train"){
-      val dataSchema: StructType = null
+      // spark 1.6 inferSchema removed
+      val dataSchema: StructType = data.schema
       val stringSchema = dataSchema.filter(field => field.dataType == StringType)
       val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
 
@@ -342,7 +345,6 @@ object ConvertLibsvm {
     val libsvm = result.get.rdd.zip(labelRdd).map{
       case (row, i) => castLibsvmString(i, row)
     }
-
 
     saveRdd(libsvm, libsvmPath)
     saveRdd(indexRdd, indexPath)

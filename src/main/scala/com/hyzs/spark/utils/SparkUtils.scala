@@ -13,7 +13,6 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.SizeEstimator
 
 
-
 /**
   * Created by Administrator on 2018/1/24.
   */
@@ -34,8 +33,8 @@ object SparkUtils {
   val invalidRowPath = "/hyzs/invalidRows/"
   val mapper = new ObjectMapper()
   mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-  // NOTE: not serializable
-  //  ObjectMapper.registerModule(DefaultScalaModule)
+  // NOTE: not serializable, cannot initialize class.
+  //mapper.registerModule(DefaultScalaModule)
   val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)
 
   def checkHDFileExist(filePath: String): Boolean = {

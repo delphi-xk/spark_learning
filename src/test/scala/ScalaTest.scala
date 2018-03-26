@@ -1,7 +1,10 @@
 import org.scalatest.FunSuite
 
 import scala.annotation.tailrec
+import java.io._
 
+import scala.io.Source
+import scala.util.Random
 /**
   * Created by xk on 2018/3/14.
   */
@@ -32,6 +35,16 @@ class ScalaTest extends FunSuite{
 
   }
 
+  test("generate label test files"){
+    val lines = Source.fromFile("d:/feature_data.csv").getLines()
+    val ids = lines.map( line => line.split(",").head)
+    val writer = new PrintWriter(new File("d:/test_label.txt"))
+    writer.write("user_id_md5,label\n")
+    ids.foreach{ id =>
+      writer.write(s"$id,${Random.nextDouble()}\n")
+    }
+    writer.close()
+  }
 
   def factorial2(x: Int): BigInt = {
     if(x == 0)1 else x*factorial2(x-1)
