@@ -118,7 +118,7 @@ object SparkUtils {
     val rows = dataFile.filter(row => !row.isEmpty)
       .map( (row:String) => {
         val arrs = row.split("\\t", -1)
-        arrs(0) +: arrs(1) +: arrs(2).split(",",-1)
+        arrs(0) +: arrs(1) +: arrs(2).split(dataSplitter,-1)
       })
     val validRow = rows
       .filter( arr => arr.length == header.length)
@@ -134,10 +134,10 @@ object SparkUtils {
 
   }
 
-  def readCsv(path:String): Dataset[Row] = {
+  def readCsv(path:String, delimiter:String): Dataset[Row] = {
     spark.read
       .option("header", "true")
-      .option("delimiter", ",")
+      .option("delimiter", delimiter)
       .option("inferSchema", "true")
       .csv(path)
 
