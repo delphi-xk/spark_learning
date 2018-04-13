@@ -3,7 +3,7 @@ package com.hyzs.spark.sql
 /**
   * Created by Administrator on 2017/9/26.
   */
-import java.text.SimpleDateFormat
+import java.text.{ParseException, SimpleDateFormat}
 import java.util.Date
 
 import org.apache.spark._
@@ -11,6 +11,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.{Column, SaveMode}
 import com.hyzs.spark.utils.PropertyUtils
+
 import scala.collection.JavaConversions.propertiesAsScalaMap
 import scala.collection.mutable
 
@@ -27,11 +28,7 @@ object BusinessTest {
 
 
   def main(args: Array[String]): Unit =  {
-    //sqlContext.setConf("spark.sql.shuffle.partitions", "53")
-    //sqlContext.setConf("spark.dynamicAllocation.enabled", "true")
-    //sqlContext.sql("set spark.sql.shuffle.partitions = 10")
-    //generateSummary2()
-    //testSave()
+
     processTypeTable(args(0))
 
   }
@@ -155,8 +152,6 @@ object BusinessTest {
     when($"t_types" <=> lit(x), $"sum_price").otherwise(0).alias("sum_price_"+x)
   }*/
 
-
-
 /*  def genCase(t_type: String, filed: String) = {
     when($"t_types" <=> lit(t_type), col(s"sum_$filed"))
       .otherwise(0)
@@ -205,7 +200,13 @@ object BusinessTest {
 
     val stampFunc: (String => Int) = (oldDate: String) => {
       val format = new SimpleDateFormat("yyyyMMdd")
-      val oldDateUnix = format.parse(oldDate).getTime / 1000L
+      var oldDateUnix = 0L
+      try{
+        oldDateUnix = format.parse(oldDate).getTime / 1000L
+      } catch {
+        case e: ParseException => oldDateUnix = 0L
+      }
+
       val endDateUnix = format.parse(endDate).getTime / 1000L
       val stamp = Math.floor((endDateUnix - oldDateUnix)/slotSecs)
       stamp.toInt
@@ -286,6 +287,8 @@ object BusinessTest {
     }
     list.toList
   }
+
+
 
 
 
