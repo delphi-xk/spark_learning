@@ -43,7 +43,7 @@ object FidelityProcess extends App{
   val tmp1 = t3.filter(col("SCHEME_CODE") === "FMPF").select("ACCOUNT_NO")
   val tmp2 = t2.select("ACCOUNT_NO", "MEMBER_ACCOUNT_NO")
   val tmp3 = t4.select("MEMBER_ACCOUNT_NO", "REAL_ID")
-  val ids = tmp1.join(tmp2, Seq("ACCOUNT_NO")).join(tmp3, Seq("MEMBER_ACCOUNT_NO"))
+  var ids = tmp1.join(tmp2, Seq("ACCOUNT_NO")).join(tmp3, Seq("MEMBER_ACCOUNT_NO"))
   saveTable(ids, "account_ids")
 
   // process transaction table -----
@@ -99,6 +99,7 @@ object FidelityProcess extends App{
   val s2 = preprocessTable("rt_account_details", "ACCOUNT_NO")
   val s3 = preprocessTable("rt_account_scheme_details", "ACCOUNT_NO")
   val s4 = preprocessTable("rt_member_account_details", "MEMBER_ACCOUNT_NO")
+  ids = ids.repartition(500, col("ACCOUNT_NO"))
   val join_result = ids.join(s1, Seq("ACCOUNT_NO"), "left")
     .join(s2, Seq("ACCOUNT_NO"), "left")
     .join(s3, Seq("ACCOUNT_NO"), "left")
@@ -108,6 +109,7 @@ object FidelityProcess extends App{
   saveTable(join_result, "all_data")
 
   // generate label table
+  // rt_account_details__HSBC_PIN_STATUS, rt_account_details__ACTIVE_FLAG, rt_account_cbr_detilas__TERMINATION_DATE
   val accounts = sqlContext.table("account_ids")
   val tag_member = t4.where(
     $"WORK_TYPE".isin("TRFOUT", "INTRAGPOUT")
