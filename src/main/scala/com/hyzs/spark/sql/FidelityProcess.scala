@@ -6,15 +6,19 @@ import org.apache.spark._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.{Column, DataFrame, SaveMode}
+import com.hyzs.spark.utils.SparkUtils.createDFfromCsv
 import com.hyzs.spark.utils.SparkUtils.checkHDFileExist
 import com.hyzs.spark.utils.SparkUtils.dropHDFiles
-
+import com.hyzs.spark.utils.SparkUtils.sqlContext
 /**
   * Created by xiangkun on 2018/4/12.
   */
 object FidelityProcess extends App{
+  import sqlContext.implicits._
 
   val warehouseDir = "/user/hive/warehouse/"
+  val dataPath = "/hyzs/data/"
+  val splitter = ","
   def saveTable(df: DataFrame, tableName:String, dbName:String="default"): Unit = {
     sqlContext.sql(s"drop table if exists $dbName.$tableName")
     val path = s"$warehouseDir$tableName"
@@ -24,20 +28,16 @@ object FidelityProcess extends App{
       .saveAsTable(s"$dbName.$tableName")
   }
 
-  val conf = new SparkConf().setAppName("FidelityProcess")
-  val sc = new SparkContext(conf)
-  val sqlContext = new HiveContext(sc)
-  import sqlContext.implicits._
   val key = "ACCOUNT_NO"
   val tables = Seq("rt_account_cbr_details", "rt_account_details",
     "rt_account_scheme_details", "rt_member_account_details")
 
-  val t1 = sqlContext.table("rt_account_cbr_details")
-  val t2 = sqlContext.table("rt_account_details")
-  val t3 = sqlContext.table("rt_account_scheme_details")
-  val t4 = sqlContext.table("rt_member_account_details")
-  val t5 = sqlContext.table("rt_awd_details_1")
-  val trans = sqlContext.table("rt_transaction")
+  val t1 = createDFfromCsv(s"${dataPath}rt_account_cbr_details.csv", splitter)
+  val t2 = createDFfromCsv(s"${dataPath}rt_account_details.csv", splitter)
+  val t3 = createDFfromCsv(s"${dataPath}rt_account_scheme_details.csv", splitter)
+  val t4 = createDFfromCsv(s"${dataPath}rt_member_account_details.csv", splitter)
+  val t5 = createDFfromCsv(s"${dataPath}rt_awd_details_1.csv", splitter)
+  val trans = createDFfromCsv(s"${dataPath}rt_transaction.csv", splitter)
 
   // generate ids table
   val tmp1 = t3.filter(col("SCHEME_CODE") === "FMPF").select("ACCOUNT_NO")
@@ -99,19 +99,20 @@ object FidelityProcess extends App{
   val s2 = preprocessTable("rt_account_details", "ACCOUNT_NO")
   val s3 = preprocessTable("rt_account_scheme_details", "ACCOUNT_NO")
   val s4 = preprocessTable("rt_member_account_details", "MEMBER_ACCOUNT_NO")
-  ids = ids.repartition(500, col("ACCOUNT_NO"))
+  ids = sqlContext.table("account_ids").select(key).repartition(500, col(key))
   val join_result = ids.join(s1, Seq("ACCOUNT_NO"), "left")
     .join(s2, Seq("ACCOUNT_NO"), "left")
     .join(s3, Seq("ACCOUNT_NO"), "left")
     .join(summary, Seq("ACCOUNT_NO"), "left")
     .repartition(500, col("MEMBER_ACCOUNT_NO"))
     .join(s4, Seq("MEMBER_ACCOUNT_NO"), "left")
-  saveTable(join_result, "all_data")
+  saveTable(join_result.repartition(500, col(key)), "all_data")
 
   // generate label table
   // rt_account_details__HSBC_PIN_STATUS, rt_account_details__ACTIVE_FLAG, rt_account_cbr_detilas__TERMINATION_DATE
+  // rt_account_cbr_details__ACCOUNT_CBR_ID, rt_account_cbr_details__SCHEME_CODE
   val accounts = sqlContext.table("account_ids")
-  val tag_member = t4.where(
+  val tag_member = t5.where(
     $"WORK_TYPE".isin("TRFOUT", "INTRAGPOUT")
       and $"WORK_STATUS".isin("TTCHECKED", "CONFIRMED", "HOLDINGTRF"))
     .select("MEMBER_ACCOUNT_NO").distinct
@@ -134,12 +135,16 @@ object FidelityProcess extends App{
     .na.fill("\\N")
     .na.replace("*", Map("null" -> "\\N", "NULL" -> "\\N", "" -> "\\N"))
   // note multiple partitions will produce multiple header line
-  train.repartition(1).write
+  saveTable(train, "train_csv")
+
+  dropHDFiles("/user/huacloud/data")
+  dropHDFiles("/user/huacloud/label")
+  train.orderBy(col(key)).repartition(1).write
     .format("com.databricks.spark.csv")
     .option("header", "true")
     .save("data")
   val label = sqlContext.table("all_label")
-  label.repartition(1).write
+  label.orderBy(col(key)).repartition(1).write
     .format("com.databricks.spark.csv")
     .option("header", "true")
     .save("label")
