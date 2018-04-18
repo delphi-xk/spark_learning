@@ -12,6 +12,13 @@ import com.hyzs.spark.utils.SparkUtils.dropHDFiles
 import com.hyzs.spark.utils.SparkUtils.sqlContext
 /**
   * Created by xiangkun on 2018/4/12.
+  *
+  *  spark-submit --class com.hyzs.spark.sql.FidelityProcess \
+  *  --jars commons-csv-1.1.jar,spark-csv_2.10-1.5.0.jar \
+  *  --executor-memory 20g \
+  *  --conf "spark.driver.extraJavaOptions=-Dderby.system.home=/opt/huacloud" \
+  *  spark_learning.jar
+  *
   */
 object FidelityProcess extends App{
   import sqlContext.implicits._
@@ -38,6 +45,11 @@ object FidelityProcess extends App{
   val t4 = createDFfromCsv(s"${dataPath}rt_member_account_details.csv", splitter)
   val t5 = createDFfromCsv(s"${dataPath}rt_awd_details_1.csv", splitter)
   val trans = createDFfromCsv(s"${dataPath}rt_transaction.csv", splitter)
+
+  // process holding amount
+  // ACCOUNT_NO, PROCESS_DATE,
+  // EMR_REG_CBR_CONT_CCY, EME_REG_CBR_CONT_CCY, EMR_INIT_CBR_CONT_CCY, EME_INIT_CBR_CONT_CCY
+  val t6 = createDFfromCsv(s"${dataPath}rt_holding_hst.csv", splitter)
 
   // generate ids table
   val tmp1 = t3.filter(col("SCHEME_CODE") === "FMPF").select("ACCOUNT_NO")
@@ -109,8 +121,7 @@ object FidelityProcess extends App{
   saveTable(join_result.repartition(500, col(key)), "all_data")
 
   // generate label table
-  // rt_account_details__HSBC_PIN_STATUS, rt_account_details__ACTIVE_FLAG, rt_account_cbr_detilas__TERMINATION_DATE
-  // rt_account_cbr_details__ACCOUNT_CBR_ID, rt_account_cbr_details__SCHEME_CODE
+
   val accounts = sqlContext.table("account_ids")
   val tag_member = t5.where(
     $"WORK_TYPE".isin("TRFOUT", "INTRAGPOUT")
@@ -129,7 +140,14 @@ object FidelityProcess extends App{
 
   // generate train data
   // use databricks csv jar: --jars commons-csv-1.1.jar,spark-csv_2.10-1.5.0.jar
-  val data = sqlContext.table("all_data").drop("MEMBER_ACCOUNT_NO")
+  // rt_account_details__HSBC_PIN_STATUS, rt_account_details__ACTIVE_FLAG, rt_account_cbr_details__TERMINATION_DATE
+  // rt_account_cbr_details__ACCOUNT_CBR_ID, rt_account_cbr_details__SCHEME_CODE
+  val data = sqlContext.table("all_data")
+    .drop("MEMBER_ACCOUNT_NO")
+    .drop("rt_account_cbr_details__TERMINATION_DATE")
+   // .drop("rt_account_details__HSBC_PIN_STATUS")
+    .drop("rt_account_details__ACTIVE_FLAG")
+    .drop("rt_account_details__HSBC_PIN_STATUS")
   val strCol = data.columns.map( field => s"cast ($field as string) $field")
   val train = data.selectExpr(strCol: _*)
     .na.fill("\\N")
