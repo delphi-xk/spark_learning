@@ -124,7 +124,11 @@ object NewDataProcess {
     spark.sql("create table sample_fix(id string, brs_brs_p0001308 string, mkt_schd_p0001328 string, mkt_schd_p0001327 string)")
 
     val fix = spark.table("sample_fix")
+    val features = sample_features.join(fix, Seq("id"), "left")
+      .selectExpr("id"+:(all.columns diff Seq("user_id", "user_id_md5")): _*)
     val sample_all = sample_features.join(sample_order, Seq("id"), "left").join(fix, Seq("id"), "left")
+    spark.sql("drop table sample_all")
+    sample_all.write.saveAsTable("sample_all")
     sample_all
       .coalesce(1)
       .write.format("com.databricks.spark.csv")
