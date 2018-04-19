@@ -69,9 +69,16 @@ object SparkUtils {
     FileUtil.copyMerge(fs, srcDir, fs, file, false, hdConf, null)
   }
 
-  def saveTable(df: Dataset[Row], tableName:String, dbName:String="hyzs"): Unit = {
+  def saveTable(df: Dataset[Row], tableName:String, dbName:String = "default"): Unit = {
+
     spark.sql(s"drop table if exists $dbName.$tableName")
-    val path = s"$warehouseDir$dbName.db/$tableName"
+    var path = ""
+    if(dbName != "default"){
+      path = s"$warehouseDir$dbName.db/$tableName"
+    }
+    else{
+      path = s"$warehouseDir$tableName"
+    }
     if(checkHDFileExist(path))dropHDFiles(path)
     df.write
       .saveAsTable(s"$dbName.$tableName")

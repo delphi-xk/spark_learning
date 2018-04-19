@@ -95,21 +95,7 @@ object NewDataProcess {
     resTable
   }
 
-
-  def main(args: Array[String]): Unit = {
-    val key = "id"
-    val table = spark.table("sample_n_enc")
-    val sample1 = spark.table("sample_w_enc")
-    val rowTable = columnToRow(table)
-    rowTable.write.saveAsTable("sample_2")
-
-    val sample_features = sample1.join(table, Seq("id"), "left")
-    sample_features.write.saveAsTable("sample_features")
-
-    val all = spark.table("hyzs.all_data")
-
-    val diffCols = all.columns diff sample_features.columns
-
+  def preprocessOrder(): Unit = {
     val sample_order = spark.table("sample_ord_enc")
     sample_order.groupBy("id")
       .agg(count("id").as("count_id"),
@@ -119,16 +105,34 @@ object NewDataProcess {
         "cast (count_id as string) count_id",
         "cast (avg_prefr_amount as string) avg_prefr_amount",
         "cast (avg_pay_amount as string) avg_pay_amount")
+    saveTable(sample_order, "sample_order")
+  }
 
-    spark.sql("drop table sample_fix")
-    spark.sql("create table sample_fix(id string, brs_brs_p0001308 string, mkt_schd_p0001328 string, mkt_schd_p0001327 string)")
+  def main(args: Array[String]): Unit = {
+    //preprocessOrder()
+    val key = "id"
+    val table = spark.table("sample_n_enc")
+    val sample1 = spark.table("sample_w_enc")
+    val rowTable = columnToRow(table)
+    saveTable(rowTable, "sample_2")
+
+    val sample_features = sample1.join(table, Seq("id"), "left")
+    saveTable(sample_features, "sample_features")
+
+    val all = spark.table("hyzs.all_data")
+
+    //val diffCols = all.columns diff sample_features.columns
+
+    val order = spark.table("sample_order")
+    //spark.sql("drop table sample_fix")
+    //spark.sql("create table sample_fix(id string, brs_brs_p0001308 string, mkt_schd_p0001328 string, mkt_schd_p0001327 string)")
 
     val fix = spark.table("sample_fix")
     val features = sample_features.join(fix, Seq("id"), "left")
       .selectExpr("id"+:(all.columns diff Seq("user_id", "user_id_md5")): _*)
-    val sample_all = sample_features.join(sample_order, Seq("id"), "left").join(fix, Seq("id"), "left")
-    spark.sql("drop table sample_all")
-    sample_all.write.saveAsTable("sample_all")
+    saveTable(features, "features")
+    val sample_all = order.join(features, Seq("id"), "right")
+    saveTable(sample_all, "sample_all")
     sample_all
       .coalesce(1)
       .write.format("com.databricks.spark.csv")
