@@ -19,7 +19,7 @@ import org.apache.spark.util.SizeEstimator
   * Created by Administrator on 2018/1/24.
   */
 object SparkUtils {
-  val conf: SparkConf = new SparkConf().setAppName("DataProcess")
+  val conf: SparkConf = new SparkConf().setAppName("FidelityProcess")
   val sc = new SparkContext(conf)
   val sqlContext = new HiveContext(sc)
   val hdConf: Configuration = sc.hadoopConfiguration
