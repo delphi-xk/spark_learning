@@ -77,8 +77,8 @@ object JDDataProcess {
   }
 
   def processNull(df: DataFrame): DataFrame = {
-    df.na.fill("0")
-      .na.replace("*", Map("null" -> "0", "NULL" -> "0", "-9999" -> "0"))
+    df.na.fill("")
+      .na.replace("*", Map("null" -> "", "NULL" -> "", "-9999" -> ""))
   }
 
   // generate label table and split data
@@ -154,19 +154,15 @@ object JDDataProcess {
   def main(args: Array[String]): Unit = {
 
     spark.sql("create database IF NOT EXISTS hyzs ")
-
+    val resTable = Option(conf.get("spark.processJob.resultTable")).getOrElse("sample_all")
+    val tableStr = Option(conf.get("spark.processJob.fileNames")).getOrElse("all_data")
     val data = conf.get("spark.processJob.dataPath")
     val header = conf.get("spark.processJob.headerPath")
-    val tableStr = conf.get("spark.processJob.fileNames")
-    val resTable = Option(conf.get("spark.processJob.resultTable")).getOrElse("all_data")
-
     val tables = tableStr.split(",")
-    // check and filter if file exists
     val validTables = tables.filter(
       tableName => checkHDFileExist(s"$header$tableName.txt") && checkHDFileExist(s"$data$tableName.txt"))
 
     if(args.length >0 && (args(0) == "import_business"||args(0) == "import_all") ) {
-      // process business table, result start with hisTable
       val tableName = validTables(0)
       val headerPath=s"$header$tableName.txt"
       val dataPath=s"$data$tableName.txt"
@@ -187,22 +183,26 @@ object JDDataProcess {
       }
     }
 
+    if(args(0) == "import_sample"){
+      val table = readCsv("/hyzs/sample_data.csv", ",")
+      saveTable(processNull(table), resTable)
+    }
+
     var result: Option[Dataset[Row]] = None
     if (args.length>1 && args(1) == "skip_join") {
-      result = Some(spark.table(s"hyzs.$resTable"))
+      result = Some(spark.table(resTable))
     } else {
-      // big table join process
       result = Some(spark.sql(s"select * from hyzs.${validTables(0)}")
-        // .sample(withReplacement=false, sampleRatio.toDouble)
         .repartition(numPartitions = partitionNums, col(key)))
 
       for(tableName <- validTables.drop(1)) {
         result = Some(joinTableProcess(result.get, tableName))
       }
+      saveTable(result.get, resTable)
     }
-    saveTable(result.get, "all_data")
+
     // if only for prediction, not need to split data or generate label table
-    if (args.length>1 && args(1) == "predict"){
+    if (args.length>2 && args(2) == "predict"){
       predictModelData(result.get)
     } else {
       trainModelData(result.get)

@@ -143,19 +143,6 @@ object ConvertLibsvm {
     BaseUtil.getUnixStamp(time).getOrElse(0)
   }
 
-  def castLibsvmString(label:String="0.0", row: Row): String = {
-    val datum = row.toSeq
-    val resString = new StringBuilder(label)
-    datum.zipWithIndex.foreach{ case (field,i) =>
-        if(field != 0.0){
-          val digit = new BigDecimal(field.toString)
-          resString += ' '
-          resString ++= s"${i+1}:${digit.toPlainString}"
-        }
-    }
-    resString.toString()
-  }
-
   def saveLibsvmFile_old(df:Dataset[Row]): Unit = {
     val assembler = new VectorAssembler()
       .setInputCols(df.columns)
@@ -262,95 +249,122 @@ object ConvertLibsvm {
     sc.makeRDD(structArray)
   }
 
+  def castLibsvmString(label:String="0.0", row: Row): String = {
+    val datum = row.toSeq
+    val resString = new StringBuilder(label)
+    datum.zipWithIndex.foreach{ case (field,i) =>
+      if(field!= null && field != 0.0){
+        val digit = new BigDecimal(field.toString)
+        resString += ' '
+        resString ++= s"${i+1}:${digit.toPlainString}"
+      }
+    }
+    resString.toString()
+  }
 
   def main(args: Array[String]): Unit = {
-    val tableName = "hyzs.jd_test_data"
-    val convertPath = "/hyzs/convert_data/"
-    val taskPath = s"$convertPath$tableName/"
-    val objPath = s"${taskPath}obj"
-    val modelPath = s"${taskPath}model"
-    val libsvmPath = s"${taskPath}libsvm"
-    val indexPath = s"${taskPath}index"
-    val namePath = s"${taskPath}name"
-    val resultPath = s"${taskPath}result"
+    val tables = conf.get("spark.processJob.tableNames").split(",")
+    val convertPath = "/hyzs/model/"
+    for(tableName <- tables){
+      val taskPath = s"$convertPath$tableName/"
+      val objPath = s"${taskPath}obj"
+      val modelPath = s"${taskPath}model"
+      val libsvmPath = s"${taskPath}libsvm"
+      val indexPath = s"${taskPath}index"
+      val namePath = s"${taskPath}name"
+      val resultPath = s"${taskPath}result"
 
-    if(args.length >1 && args(1) == "import"){
-      import_data()
-    }
-    val sourceData = spark.table(tableName).drop(originalKey)
-    val allLabel = spark.table("hyzs.jd_test_label")
-    // filter label based on source data
-    val fullData = allLabel.join(sourceData, Seq(key), "left")
+      val sourceData = spark.table(tableName).repartition(200, col(key))
+      val allLabel = spark.table("m1_label").repartition(200, col(key))
+      // filter label based on source data
+      val fullData = allLabel.join(sourceData, Seq(key), "left").repartition(200, col(key))
 
-    val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row(0).toString)
-    val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row(0).toString)
-    val data = fullData.drop(key).drop("label")
-      .na.fill("0.0")
-      .na.fill(0.0)
-      .na.replace("*", Map("" -> "0", "null" -> "0"))
-    val nameRdd = sc.makeRDD[String](sourceData.columns)
+      val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row(0).toString)
+      val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row(0).toString)
+      val data = fullData.drop(key).drop("label")
+        .na.fill("0.0")
+        .na.replace("*", Map("" -> "0.0", "null" -> "0.0"))
+      val nameRdd = sc.makeRDD[String](sourceData.columns)
 
-    val dataColsArray = data.columns
-    var stringCols = Seq[String]()
-    var timeCols = Seq[String]()
-    var numberCols = Seq[String]()
-    var result: Option[Dataset[Row]] = None
-    if(args.length >0 && args(0) == "predict"){
-      val pipeline = Pipeline.load(modelPath)
-      result = Some(pipeline.fit(data).transform(data))
+      val dataColsArray = data.columns
+      var stringCols = Seq[String]()
+      var timeCols = Seq[String]()
+      var numberCols = Seq[String]()
+      var result:Dataset[Row] = null
 
-      val objList = readObj(s"$resultPath/$tableName.obj")
-      stringCols = objList.filter(obj => obj.value == Params.STRING_TYPE).map(_.fieldName)
-      timeCols = objList.filter(obj => obj.value == Params.DATE_TYPE).map(_.fieldName)
-      numberCols = objList.filter(obj => obj.value == Params.NUMERIC_TYPE).map(_.fieldName)
+      if(args.length >0 && args(0) == "import_table"){
+        result = spark.table(s"${tableName}_libsvm")
+      }
+      else{
+        if(args.length >1 && args(1) == "predict"){
+          //val pipeline = Pipeline.load(modelPath)
+          //result = Some(pipeline.fit(data).transform(data))
+          //val objList = readObj(s"$resultPath/$tableName.obj")
 
-    } else if(args.length >0 && args(0) == "train"){
-      // spark 1.6 inferSchema removed
-      val dataSchema: StructType = data.schema
-      val stringSchema = dataSchema.filter(field => field.dataType == StringType)
-      val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
+          val dataSchema: StructType = data.schema
+          val stringSchema = dataSchema.filter(field => field.dataType == StringType)
+          val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
+          stringCols = stringSchema.map(field => field.name)
+          timeCols = timeSchema.map(field => field.name)
+          numberCols = data.columns diff stringCols diff timeCols
 
-      val indexerArray = stringSchema.map(field => getIndexers(data, field.name))
-      val objRdd = buildObjRdd(dataSchema, indexerArray)
-      val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
-      stringCols = stringSchema.map(field => field.name)
-      timeCols = timeSchema.map(field => field.name)
-      numberCols = data.columns diff stringCols diff timeCols
+          val indexerArray = stringCols.map(field => getIndexers(data, field))
+          val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
+          result = pipeline.fit(data).transform(data)
 
-      if(checkHDFileExist(modelPath))dropHDFiles(modelPath)
-      pipeline.save(modelPath)
+        } else if(args.length >1 && args(1) == "train"){
+          // spark 1.6 inferSchema removed
+          val dataSchema: StructType = data.schema
+          val stringSchema = dataSchema.filter(field => field.dataType == StringType)
+          val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
 
-      result = Some(pipeline.fit(data).transform(data))
+          val indexerArray = stringSchema.map(field => getIndexers(data, field.name))
+          val objRdd = buildObjRdd(dataSchema, indexerArray)
+          val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
+          stringCols = stringSchema.map(field => field.name)
+          timeCols = timeSchema.map(field => field.name)
+          numberCols = data.columns diff stringCols diff timeCols
 
-      saveRdd(objRdd, objPath)
-      saveRdd(nameRdd, namePath)
+          if(checkHDFileExist(modelPath))dropHDFiles(modelPath)
+          pipeline.save(modelPath)
+
+          result = pipeline.fit(data).transform(data)
+
+          saveRdd(objRdd, objPath)
+          saveRdd(nameRdd, namePath)
+          mkHDdir(resultPath)
+          copyMergeHDFiles(s"$objPath/", s"$resultPath/$tableName.obj")
+          copyMergeHDFiles(s"$namePath/", s"$resultPath/$tableName.name")
+        }
+
+        val stampUdf = udf(castTimestampFuc _)
+        for(col <- timeCols){
+          result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
+        }
+
+        for(col <- numberCols){
+          result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
+        }
+        result = dropOldCols(result, stringCols, timeCols, numberCols).get
+        result = result.selectExpr(dataColsArray:_*)
+        saveTable(result, s"${tableName}_libsvm")
+      }
+
+      // zip rdd should have THE SAME partitions
+      /*    val libsvm = result.get.rdd.zip(labelRdd).map{
+            case (row, i) => castLibsvmString(i, row)
+          }*/
+
+      val libsvm: RDD[String] = result.rdd.zip(labelRdd).mapPartitions(rows => {
+        rows.map{ case(row, i) => castLibsvmString(i, row)}
+      })
+
+      saveRdd(libsvm, libsvmPath)
+      saveRdd(indexRdd, indexPath)
       mkHDdir(resultPath)
-      copyMergeHDFiles(s"$objPath/", s"$resultPath/$tableName.obj")
-      copyMergeHDFiles(s"$namePath/", s"$resultPath/$tableName.name")
+      copyMergeHDFiles(s"$libsvmPath/", s"$resultPath/$tableName.libsvm")
+      copyMergeHDFiles(s"$indexPath/", s"$resultPath/$tableName.index")
     }
-
-    val stampUdf = udf(castTimestampFuc _)
-    for(col <- timeCols){
-      result = Some(result.get.withColumn(s"${col}_stamp", stampUdf(result.get(col))))
-    }
-
-    for(col <- numberCols){
-      result = Some(result.get.withColumn(s"${col}_number", result.get(col).cast(DoubleType)))
-    }
-    result = dropOldCols(result.get, stringCols, timeCols, numberCols)
-    result = Some(result.get.selectExpr(dataColsArray:_*))
-    saveTable(result.get, "jd_test_result")
-
-    // zip rdd should have THE SAME partitions
-    val libsvm = result.get.rdd.zip(labelRdd).map{
-      case (row, i) => castLibsvmString(i, row)
-    }
-
-    saveRdd(libsvm, libsvmPath)
-    saveRdd(indexRdd, indexPath)
-    mkHDdir(resultPath)
-    copyMergeHDFiles(s"$libsvmPath/", s"$resultPath/$tableName.libsvm")
-    copyMergeHDFiles(s"$indexPath/", s"$resultPath/$tableName.index")
 
   }
 }
