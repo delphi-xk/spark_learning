@@ -45,16 +45,20 @@ object ConvertLibsvm_v2 {
     df.selectExpr(remainCols ++: replaceExprs: _*)
   }
 
-  def dropOrgCols(df:Dataset[Row],
+  def replaceOldCols(df:Dataset[Row],
                   idCols:Seq[String],
                   stringCols:Seq[String],
                   timeCols:Seq[String],
-                  numberCols:Seq[String]): Option[Dataset[Row]] = {
+                  numberCols:Seq[String],
+                  allCols:Seq[String]): Dataset[Row] = {
     // add string index start with 1
     val strExprs = stringCols.map(col => s" (${col}_indexer + 1) as $col")
-    val timeExprs = timeCols.map(col => s" ${col}_stamp as $col")
-    val numberExprs = numberCols.map(col =>  s" ${col}_number as $col")
-    Some(df.selectExpr(idCols ++: strExprs ++: timeExprs ++: numberExprs :_*))
+    val timeExprs = timeCols.map(col => s" stamp($col) as $col")
+    val numberExprs = numberCols.map(col =>  s" cast($col as double) $col")
+    spark.udf.register("stamp", castTimestampFuc _)
+
+    df.selectExpr(idCols ++: strExprs ++: timeExprs ++: numberExprs :_*)
+      .selectExpr(allCols: _*)
   }
 
   def castTimestampFuc(time:String): Long = {
@@ -159,6 +163,7 @@ object ConvertLibsvm_v2 {
       val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row(0).toString)
       val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row(0).toString)
       var result:Dataset[Row] = fullData //.drop(key).drop("label")
+        .na.fill(0.0)
         .na.fill("0.0")
         .na.replace("*", Map("" -> "0.0", "null" -> "0.0"))
       val nameRdd = sc.makeRDD[String](sourceData.columns)
@@ -201,17 +206,17 @@ object ConvertLibsvm_v2 {
           println("save obj name finished.")
         }
 
-        val stampUdf = udf(castTimestampFuc _)
-        for(col <- timeCols){
+
+/*        for(col <- timeCols){
           result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
         }
 
         for(col <- numberCols){
           result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
-        }
-        result = dropOrgCols(result, idCols, stringCols, timeCols, numberCols).get
-        // set original column order
-        result = result.selectExpr(allCols:_*)
+        }*/
+
+        result = replaceOldCols(result, idCols, stringCols, timeCols, numberCols, allCols)
+
         println("start save libsvm table")
         saveTable(result, s"${tableName}_libsvm")
       }
