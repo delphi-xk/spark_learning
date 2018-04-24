@@ -3,6 +3,8 @@ import org.scalatest.FunSuite
 import scala.annotation.tailrec
 import java.io._
 
+import com.hyzs.spark.utils.BaseUtil
+
 import scala.io.Source
 import scala.util.Random
 /**
@@ -65,6 +67,13 @@ class ScalaTest extends FunSuite{
     println(factorial(1))
     println(factorial(3))
     println(factorial(5))
+  }
+
+  test("Unix time test"){
+    val time = "2017-11-11 21:21:56.0"
+    val time2 = "2017-11-11 21:21:5"
+    println(BaseUtil.getUnixStamp(time))
+    println(BaseUtil.getUnixStamp(time2))
   }
 
 }
