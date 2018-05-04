@@ -16,7 +16,31 @@
 
 > https://stackoverflow.com/questions/24696777/what-is-the-relationship-between-workers-worker-instances-and-executors
 
-### 2. Spark常用操作
+### 2. Shuffle过程
+
+#### Hash Shuffle
+- spark1.2版本前使用的shuffle过程，spark2.0后移除。
+- 每个mapper会根据reducer个数，遍历所有record，生成R个文件。
+- 在shuffle过程中，集群最多会生成M\*R个文件，会造成文件系统效率低下及巨大的网络流量压力。
+
+#### Sort Shuffle
+- spark1.2后默认使用的shuffle过程。
+- 在mapper端将文件根据reducer id加上索引并排序，这样能直接传输一段数据块给每个需要数据的reducer；
+
+
+#### Tungsten Sort(Unsafe Shuffle)
+
+> https://0x0fff.com/spark-architecture-shuffle/
+
+### 3. SparkSQL join类型
+
+#### Shuffle Hash Join
+
+#### Broadcast Hash Join
+
+#### Sort Merge Join
+
+### 4. Spark常用优化操作
 
 - 进行多表、大表的join操作时，尽量在合表前将表以连接key进行repartition操作，这样可以触发sort merge join
 - 使用cache或persist进行缓存时，尽量在执行cache后或调用被缓存数据前执行一次action（如first），以保证缓存在后面操作中生效
@@ -39,7 +63,7 @@
 
 > https://github.com/databricks/learning-spark
 
-### 3. Spark程序调试
+### 5. Spark程序调试
 
 #### 内存的调试（OOM）
 
