@@ -25,10 +25,21 @@
 
 #### Sort Shuffle
 - spark1.2后默认使用的shuffle过程。
-- 在mapper端将文件根据reducer id加上索引并排序，这样能直接传输一段数据块给每个需要数据的reducer；
-
+- 在mapper端将文件根据reducer id加上索引并排序，这样能直接传输整块数据块给每个需要数据的reducer；
+- 如果reducer个数不多（不超过`spark.shuffle.sort.bypassMergeThreshold`），将跳过合并和排序；
+- 如果没有足够的内存来存储map端输出的内容，将使用本地磁盘；
+- 参数`spark.shuffle.spill `能控制开启或关闭spill（默认开启）；
+- 减少map端生成的碎片文件数量；
+- 减少随机IO操作，大部分是有序读写；
+- 排序比哈希操作效率低；
 
 #### Tungsten Sort(Unsafe Shuffle)
+- spark1.4后可设置`spark.shuffle.manager = tungsten-sort`来优化shuffle过程；
+- 直接操作二进制文件，不需要反序列化；
+- 使用ShuffleExternalSorter排序；
+- spill效率更高；
+- 不稳定
+
 
 > https://0x0fff.com/spark-architecture-shuffle/
 

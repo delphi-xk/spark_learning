@@ -17,14 +17,21 @@
 |Area Under Precision-Recall Curve	|\\(AUPRC=\int^1_{0} \frac{TP}{TP+FP} d\left(\frac{TP}{P}\right)\\)||
 |MAE|\\(MAE = \frac{1}{n}\sum_{i=0}^n\mid y_i - \hat{y_i} \mid \\)|负向指标，值越小越好，取值范围0到无穷大；<br/>对比RMSE，易解释，易理解，易计算|
 |RMSE|\\(RMSE = \sqrt{\frac{1}{n}\sum_{i=0}^n {\({y_i} - \hat{y_i}\)}^2 }\\)|又作RMSD(root mean square deviation)，负向指标，值越小越好，取值范围0到无穷大；<br/>能更好的限制误差的量级，有效识别大误差|
+|DCG|\\( DCG = rel_1+\sum_{i=2}^p \frac{rel_i}{\log_2 i} \\)|当权重以单调递减方式排序后，有DCG最大值，为iDCG（ideal DCG）|
+|NDCG|\\( NDCG = \frac{DCG}{iDCG}\\)| |
 
 ### MAE: mean absolute error
 
 ### RMSE: root mean square error
 
 ### KS TEST
+- 基于累计分布函数，用于检验数据是否符合某个分布或两个分布是否相同；
+
+
 
 ### DCG: discounted cumulative gain
+- 信息检索中，用来测量搜索引擎检索质量的评价指标；
+
 
 ### NDCG: Normalized DCG 
 
