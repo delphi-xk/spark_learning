@@ -76,4 +76,15 @@ class ScalaTest extends FunSuite{
     println(BaseUtil.getUnixStamp(time2))
   }
 
+  test("matrix test file"){
+    val writer = new PrintWriter(new File("d:/test_matrix.txt"))
+    for( i <- 0 to 100000){
+      for( j <- 0 to 9){
+        writer.write((Random.nextDouble()*10)+",")
+      }
+      writer.write(Random.nextDouble()*10+"\n")
+    }
+    writer.close()
+  }
+
 }

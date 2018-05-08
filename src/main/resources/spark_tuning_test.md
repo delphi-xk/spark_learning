@@ -16,6 +16,16 @@
 
 > https://stackoverflow.com/questions/24696777/what-is-the-relationship-between-workers-worker-instances-and-executors
 
+#### 内存结构
+
+- Reserved Memory.在源码中定义的，系统预留的300M内存，不建议修改。保存spark内元数据结构。
+- User Memory.存储用户定义的数据结构或Spark元数据结构，默认大小：（Java堆内存-预留内存）\*25%。
+- Spark Memory.Uniformed Memory，动态分配Storage和Execution的比例，默认大小：（Java堆内存-预留内存）\*75%。
+- Storage主要用于缓存数据，Execution主要用于Shuffle过程。
+- RDD在缓存到Storage之前，占用堆内存user memory部分, 每个Partition内数据（record）通过迭代器（Iterator）访问，同一Partition内record存储位置不一定连续。
+- RDD在缓存后，将存储于堆内或堆外的Storage部分，Partition转变为Block，将占 用一段连续空间，该过程称为Unroll（展开）。
+- 
+
 ### 2. Shuffle过程
 
 #### Hash Shuffle
