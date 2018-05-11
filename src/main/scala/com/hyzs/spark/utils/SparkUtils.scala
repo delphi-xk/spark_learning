@@ -6,6 +6,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FileUtil, Path}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -153,5 +154,7 @@ object SparkUtils {
   def estimator[T](rdd: RDD[T]): Long = {
     SizeEstimator.estimate(rdd)
   }
+
+
 
 }

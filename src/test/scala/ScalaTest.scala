@@ -4,6 +4,8 @@ import scala.annotation.tailrec
 import java.io._
 
 import com.hyzs.spark.utils.BaseUtil
+import com.hyzs.spark.utils.BaseUtil._
+import org.apache.spark.sql.Row
 
 import scala.io.Source
 import scala.util.Random
@@ -87,4 +89,22 @@ class ScalaTest extends FunSuite{
     writer.close()
   }
 
+  test("evaluation test file"){
+    val writer = new PrintWriter(new File("d:/evaluation_test.txt"))
+    for( i <- 0 until 100000){
+      writer.write(i+",")
+      writer.write(Random.nextDouble+",")
+      writer.write(Random.nextInt(2)+"\n")
+    }
+    writer.close()
+  }
+
+  test("type cast in spark"){
+    val row = Row(1,3,4.0, "5")
+    for(v <- row.toSeq){
+      println(toDoubleDynamic(v))
+    }
+    println(anySeqToSparkVector(Array(1,2.3,3)))
+    println(anySeqToSparkVector(row.toSeq))
+  }
 }

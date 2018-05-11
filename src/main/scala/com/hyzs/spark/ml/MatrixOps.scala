@@ -23,7 +23,6 @@ object MatrixOps extends App{
     IndexedRow(index, vector)
   }
 
-
   val rowNum = matrix.count()
 
   val first = matrix.first()
