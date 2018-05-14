@@ -6,6 +6,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Dataset
 
 /**
   * Created by xk on 2018/5/8.
@@ -27,7 +28,6 @@ object MatrixOps extends App{
 
   val first = matrix.first()
   val res1 = matrix.map(v => Vectors.sqdist(v, first))
-
 
 
 }

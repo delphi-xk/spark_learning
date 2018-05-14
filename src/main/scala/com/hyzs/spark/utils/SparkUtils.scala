@@ -8,7 +8,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, FileUtil, Path}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.{Dataset, Row, SQLContext, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.SizeEstimator
@@ -25,6 +25,7 @@ object SparkUtils {
     //.config("spark.sql.warehouse.dir", warehouseDir)
     .enableHiveSupport()
     .getOrCreate()
+  val sqlContext: SQLContext = spark.sqlContext
   val sc:SparkContext = spark.sparkContext
   val conf:SparkConf = sc.getConf
   val hdConf: Configuration = sc.hadoopConfiguration

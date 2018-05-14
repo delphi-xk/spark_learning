@@ -5,7 +5,7 @@
 * False Positive (FP) - 标签为负，预测为正
 * False Negative (FN) - 标签为正，预测为负
 
-### Confusion Matrix
+### 混淆矩阵（Confusion Matrix）
 ![](https://note.youdao.com/yws/api/personal/file/7456F54FE899436D863546AAF7A20F77?method=download&shareKey=a823568a6551ae56eb90cedaf2c594a9)
 
 ### KS TEST
@@ -18,16 +18,27 @@
 - 可发现，在第7个区间上，两个累计分布的间隔达到最大为（94%-12%=82%），即ks-test值为0.82
 
 ### ROC: Receiver operating characteristic（接收机操作特性）
-- 以（FPR，TPR）为点作出的曲线；
+
+![](https://note.youdao.com/yws/api/personal/file/756F1B92B64B4304AAEB6260D42EFB19?method=download&shareKey=2a0f9d84961d46e7978e4d7d4614079a "roc distribution")
+
+- 可以用两个函数来分别表示样本空间中正例和负例的在模型预测分数上的分布情况；
+- 设置一个临界值来划分模型预测的正例和负例的区间；
+- 当临界值不断变化时，以（FPR，TPR）为点作出的曲线，即是roc曲线；
+
+![](https://note.youdao.com/yws/api/personal/file/68406968B7014832A9A9D92366A5AAF8?method=download&shareKey=7dda95075b0c5ee38409defdcb15f440)
+
+- 当两个分布分离的越开时，说明模型对正、负例区分的较好；
+- 当两个分布重合的越多时，说明模型对正、负例区分能力较差；
+
+### AUC: Area Under ROC Curve
 
 ![](https://note.youdao.com/yws/api/personal/file/409EEFE4D636423B9022ED9F60488D18?method=download&shareKey=6b22beb44139d97e26106d17648efa1a "roc")
 
-### AUC: Area Under ROC Curve
 - 当roc曲线下面积auc值为1时，意味着分类器能够完美的区分正例和负例，是一个完美分类器；
 - roc值为0.5时，意味着分类器无法区分正例和负例，是完全随机的分类器；
-- roc值在0.8以上时即为好的分类器。
+- 正常的roc值在0.5和1之间，在0.8以上时即为好的分类器。
 
-### AUPRC: Area Under Precision-Recall Curve
+![](https://note.youdao.com/yws/api/personal/file/5A3A29DD71D04CB4B901B8F093A61652?method=download&shareKey=153e44ac0d28f6eb2a19c0adf22374cd "roc")
 
 ### DCG: discounted cumulative gain
 - 信息检索中，用来测量搜索引擎（排序系统，推荐系统）检索质量的评价指标；
@@ -41,7 +52,7 @@
 > https://en.wikipedia.org/wiki/Discounted_cumulative_gain
 > http://spark.apache.org/docs/2.2.1/mllib-evaluation-metrics.html
 > https://en.wikipedia.org/wiki/Receiver_operating_characteristic
-
+> http://www.saedsayad.com/flash/RocGainKS.html
 
 ### 计算公式
 

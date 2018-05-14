@@ -108,6 +108,14 @@ object NewDataProcess {
     saveTable(sample_order, "sample_order")
   }
 
+
+  def createDatasetTest(): Unit ={
+    case class Person(name : String , age : Int)
+    val personRDD = sc.makeRDD(Seq(Person("A",10),Person("B",20)))
+    val personDF = sqlContext.createDataFrame(personRDD)
+    val ds:Dataset[Person] = personDF.as[Person]
+  }
+
   def main(args: Array[String]): Unit = {
     //preprocessOrder()
     val key = "id"
