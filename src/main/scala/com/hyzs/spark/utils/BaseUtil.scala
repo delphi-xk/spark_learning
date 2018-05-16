@@ -4,6 +4,9 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.sql.Row
+
+import scala.collection.mutable.ArrayBuffer
+import scala.io.Source
 import scala.util.{Failure, Success, Try}
 /**
   * Created by Administrator on 2018/2/5.
@@ -39,6 +42,16 @@ object BaseUtil {
     case s: Seq[Any] => Row(s.map(toDoubleDynamic))
     case r: Row => Row(r.toSeq.map(toDoubleDynamic))
     case _ => throw new ClassCastException("unsupported class")
+  }
+
+  def readCsvFile(path:String): Array[Array[String]] = {
+    val reader = Source.fromFile(path)
+    val resBuf = new ArrayBuffer[Array[String]]()
+    for(line <- reader.getLines()){
+      val cols = line.split(",").map(_.trim)
+      resBuf.append(cols)
+    }
+    resBuf.toArray
   }
 
 }

@@ -107,4 +107,11 @@ class ScalaTest extends FunSuite{
     println(anySeqToSparkVector(Array(1,2.3,3)))
     println(anySeqToSparkVector(row.toSeq))
   }
+
+  test("test read csv file"){
+    val csvFile = readCsvFile("d:/test0515.csv")
+    for(i <- 0 until 10){
+      println(csvFile(i).mkString(","))
+    }
+  }
 }
