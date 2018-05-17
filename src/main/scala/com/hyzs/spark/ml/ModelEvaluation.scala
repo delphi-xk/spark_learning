@@ -9,9 +9,9 @@ import scala.math.BigDecimal.RoundingMode
   */
 object ModelEvaluation extends App{
 
-
-  val testData: Array[(Double, Int)] = readCsvFile("d:/test0515.csv").drop(1)
-    .map(row => (row(0).toDouble, row(1).toInt))
+  val globalDecimalScale = 5
+  val testData: Array[(BigDecimal, Int)] = readCsvFile("d:/test0515.csv").drop(1)
+    .map(row => (getDecimalValue(row(0).toDouble), row(1).toInt))
   val posData = testData.filter(_._2 == 1)
   val negData = testData.filter(_._2 == 0)
   println(posData.length)
@@ -21,19 +21,45 @@ object ModelEvaluation extends App{
 /*  for(i <- 0 to 20){
     println(sortedData(i))
   }*/
-  val threVal = sortedData.map(_._1).distinct
-  println(threVal.length)
+  val threVal = sortedData.map( _._1)
+    .distinct
+  //println(threVal.length)
 
-  for(threshold <- threVal.take(10)){
+/*  for(threshold <- threVal.take(10)){
     println(threshold, countCumNum(threshold, sortedData, posData.length, negData.length, 5))
-  }
+  }*/
 
-  def countCumNum(threshold:Double, data:Array[(Double, Int)], posNum:Long, negNum:Long, scale:Int): (BigDecimal, BigDecimal) = {
+  val pointArray: Array[(BigDecimal, BigDecimal)] = threVal.map( thred => countCumNum(thred, testData))
+  println(findKSValue(pointArray))
+
+
+  def countCumNum(threshold:BigDecimal, data:Array[(BigDecimal, Int)]): (BigDecimal, BigDecimal) = {
     val selectData = data.filter(_._1 <= threshold)
-    val posData = selectData.filter(_._2 == 1)
-    val negData = selectData.filter(_._2 == 0)
-    val posRatio = (BigDecimal(posData.length) / BigDecimal(posNum)).setScale(scale, RoundingMode.HALF_UP)
-    val negRatio = (BigDecimal(negData.length).setScale(scale) / BigDecimal(negNum)).setScale(scale, RoundingMode.HALF_UP)
+    val posData = selectData.count(_._2 == 1)
+    val negData = selectData.count(_._2 == 0)
+    val totalPos = data.count(_._2 == 1)
+    val totalNeg = data.count(_._2 == 0)
+    val posRatio = getDecimalValue(posData) / getDecimalValue(totalPos)
+    val negRatio = getDecimalValue(negData) / getDecimalValue(totalNeg)
     (posRatio, negRatio)
   }
+
+/*  def calTrueAndFalsePositive(theshold:BigDecimal, data:Array[(BigDecimal, Int)]): (BigDecimal, BigDecimal) = {
+    val posData = data.filter(_._1 >= theshold)
+    val negData = data.filter(_._1 < theshold)
+
+
+  }*/
+
+  def getDecimalValue(num:Double): BigDecimal={
+    BigDecimal(num).setScale(globalDecimalScale, RoundingMode.HALF_UP)
+  }
+  def findKSValue(pointArray:Array[(BigDecimal, BigDecimal)]): BigDecimal = {
+    val ksVal = pointArray.map(point => math.abs((point._1 - point._2).toDouble))
+    getDecimalValue(ksVal.max)
+  }
+
+
+
+
 }
