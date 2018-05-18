@@ -1,5 +1,6 @@
 package com.hyzs.spark.ml
 
+import java.io._
 import com.hyzs.spark.utils.BaseUtil._
 
 import math.BigDecimal
@@ -19,6 +20,12 @@ object ModelEvaluation extends App{
     .map( thred => countCumulativeRatio(thred, testData))
   println(s"ks value: "+ findKSValue(ksPointArray))
 
+  val ksPoints1: Array[(Double, Double)] = threVal.zip(ksPointArray.map(_._1))
+  val ksPoints2: Array[(Double, Double)] = threVal.zip(ksPointArray.map(_._2))
+  outputPointArray("d:/ks-points1.csv", simplifyPointByScale(ksPoints1))
+  outputPointArray("d:/ks-points2.csv", simplifyPointByScale(ksPoints2))
+
+
   // from 0 to 1
   val rocPointArray: Array[(Double, Double)] = threVal
     .map( thred => countTrueAndFalsePositiveRatio(thred, testData))
@@ -29,6 +36,8 @@ object ModelEvaluation extends App{
     println(point)
   }
   println(s"area under curve: ${areaUnderCurve(simplePoints)}")
+  outputPointArray("d:/roc-simple-points.csv", simplePoints)
+
 
   def countCumulativeRatio(threshold:Double, data:Array[(Double, Int)]): (Double, Double) = {
     val selectData = data.filter(_._1 <= threshold)
@@ -83,5 +92,12 @@ object ModelEvaluation extends App{
     } else 0
   }
 
+  def outputPointArray(outputPath:String, pointArray:Array[(Double, Double)]): Unit ={
+    val writer = new PrintWriter(new File(outputPath))
+    for(point <- pointArray){
+      writer.write(s"${point._1},${point._2}"+"\n")
+    }
+    writer.close()
+  }
 
 }
