@@ -41,8 +41,6 @@
 ![](https://note.youdao.com/yws/api/personal/file/5A3A29DD71D04CB4B901B8F093A61652?method=download&shareKey=153e44ac0d28f6eb2a19c0adf22374cd "roc")
 
 ### DCG: discounted cumulative gain
-- 信息检索中，用来测量搜索引擎（排序系统，推荐系统）检索质量的评价指标；
-- 权重高的项排在前面的DCG值越大，越往后DCG值越小；
 
 ### NDCG: Normalized DCG 
 
@@ -67,7 +65,7 @@
 |Area Under Precision-Recall Curve	|\\(AUPRC=\int^1_{0} \frac{TP}{TP+FP} d\left(\frac{TP}{P}\right)\\)||
 |MAE(mean absolute error)|\\(MAE = \frac{1}{n}\sum_{i=0}^n\mid y_i - \hat{y_i} \mid \\)|负向指标，值越小越好，取值范围0到无穷大；<br/>对比RMSE，易解释，易理解，易计算|
 |RMSE(root mean square error)|\\(RMSE = \sqrt{\frac{1}{n}\sum_{i=0}^n {\({y_i} - \hat{y_i}\)}^2 }\\)|又作RMSD(root mean square deviation)，负向指标，值越小越好，取值范围0到无穷大；<br/>能更好的限制误差的量级，有效识别大误差|
-|DCG|\\( DCG = rel_1+\sum_{i=2}^p \frac{rel_i}{\log_2 i} \\)|当权重以单调递减方式排序后，DCG可取到最大值，为iDCG（ideal DCG）|
-|NDCG|\\( NDCG = \frac{DCG}{iDCG}\\)| |
+|DCG|\\( DCG = rel_1+\sum_{i=2}^p \frac{rel_i}{\log_2 i} \\)|信息检索中，用来测量搜索引擎（排序系统，推荐系统）检索质量的评价指标，权重高的项排在前面的DCG值越大，越往后DCG值越小|
+|NDCG|\\( NDCG = \frac{DCG}{iDCG}\\)|当权重以单调递减方式排序后，DCG可取到最大值，为iDCG（ideal DCG） |
 
 <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default"></script>

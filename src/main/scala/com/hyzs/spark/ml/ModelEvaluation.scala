@@ -22,8 +22,8 @@ object ModelEvaluation extends App{
 
   val ksPoints1: Array[(Double, Double)] = threVal.zip(ksPointArray.map(_._1))
   val ksPoints2: Array[(Double, Double)] = threVal.zip(ksPointArray.map(_._2))
-  outputPointArray("d:/ks-points1.csv", simplifyPointByScale(ksPoints1))
-  outputPointArray("d:/ks-points2.csv", simplifyPointByScale(ksPoints2))
+  //outputPointArray("d:/ks-points1.csv", simplifyPointByScale(ksPoints1))
+  //outputPointArray("d:/ks-points2.csv", simplifyPointByScale(ksPoints2))
 
 
   // from 0 to 1
@@ -36,7 +36,7 @@ object ModelEvaluation extends App{
     println(point)
   }
   println(s"area under curve: ${areaUnderCurve(simplePoints)}")
-  outputPointArray("d:/roc-simple-points.csv", simplePoints)
+  //outputPointArray("d:/roc-simple-points.csv", simplePoints)
 
 
   def countCumulativeRatio(threshold:Double, data:Array[(Double, Int)]): (Double, Double) = {
