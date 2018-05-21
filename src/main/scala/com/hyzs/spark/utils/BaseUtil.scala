@@ -30,9 +30,10 @@ object BaseUtil {
     case _ => throw new ClassCastException("cannot cast to double")
   }
 
-  def anySeqToSparkVector[T](x: Any): Vector = x match {
-    case a: Array[T] => Vectors.dense(a.map(toDoubleDynamic))
+  def anySeqToSparkVector(x: Any): Vector = x match {
+    case a: Array[Any] => Vectors.dense(a.map(toDoubleDynamic))
     case s: Seq[Any] => Vectors.dense(s.toArray.map(toDoubleDynamic))
+    case r: Row => Vectors.dense(r.toSeq.toArray.map(toDoubleDynamic))
     case v: Vector => v
     case _ => throw new ClassCastException("unsupported class")
   }
