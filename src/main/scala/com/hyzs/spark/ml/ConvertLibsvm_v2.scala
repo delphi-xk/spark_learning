@@ -18,7 +18,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
-
+import com.hyzs.spark.sql.JDDataProcess
 
 /**
   * Created by XIANGKUN on 2018/4/24.
@@ -27,7 +27,8 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 object ConvertLibsvm_v2 {
 
   val originalKey = "user_id"
-  val key = "user_id_md5"
+  //val key = "user_id_md5"
+  val key = "id"
   val maxLabelMapLength = 20
 
   def getIndexers(df: Dataset[Row], col: String): (String, StringIndexerModel) = {
@@ -140,10 +141,13 @@ object ConvertLibsvm_v2 {
     resString.toString()
   }
 
-  def main(args: Array[String]): Unit = {
-    //val tables = Seq("m1_test", "m2_test", "m3_test")
-    //val labels = Seq("m1_label", "m2_label", "m3_label")
-    val tables = Seq("m1_test")
+  def prepareDataTable(): Unit ={
+    val data = spark.table("sample_all")
+    JDDataProcess.trainModelData(processNull(data))
+  }
+
+  def convertLibsvm(args: Array[String]): Unit ={
+    val tables = Seq("m1_train")
     val labels = Seq("m1_label")
 
     val convertPath = "/hyzs/model/"
@@ -158,7 +162,8 @@ object ConvertLibsvm_v2 {
 
       val sourceData = spark.table(tableName)
       val label = spark.table(labelName)
-      val fullData = label.join(sourceData, Seq(key), "left")
+      // join process based on id in data table
+      val fullData = label.join(sourceData, Seq(key), "right")
 
       val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row(0).toString)
       val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row(0).toString)
@@ -206,15 +211,6 @@ object ConvertLibsvm_v2 {
           println("save obj name finished.")
         }
 
-
-/*        for(col <- timeCols){
-          result = result.withColumn(s"${col}_stamp", stampUdf(result(col)))
-        }
-
-        for(col <- numberCols){
-          result = result.withColumn(s"${col}_number", result(col).cast(DoubleType))
-        }*/
-
         result = replaceOldCols(result, idCols, stringCols, timeCols, numberCols, allCols)
 
         println("start save libsvm table")
@@ -237,6 +233,11 @@ object ConvertLibsvm_v2 {
       copyMergeHDFiles(s"$indexPath/", s"$resultPath/$tableName.index")
       println("merge file finished.")
     }
+  }
+
+  def main(args: Array[String]): Unit = {
+    prepareDataTable
+    //convertLibsvm(args)
 
   }
 }

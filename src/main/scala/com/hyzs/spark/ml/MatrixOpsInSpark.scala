@@ -7,7 +7,6 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.{Dataset, Row}
-
 /**
   * Created by xk on 2018/5/8.
   */

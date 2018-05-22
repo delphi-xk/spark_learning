@@ -73,6 +73,11 @@ object SparkUtils {
     FileUtil.copyMerge(fs, srcDir, fs, file, false, hdConf, null)
   }
 
+  def processNull(df: Dataset[Row]): Dataset[Row] = {
+    df.na.fill("")
+      .na.replace("*", Map("null" -> "", "NULL" -> "", "-9999" -> "", -9999 -> 0))
+  }
+
   def saveTable(df: Dataset[Row], tableName:String, dbName:String = "default"): Unit = {
 
     spark.sql(s"drop table if exists $dbName.$tableName")

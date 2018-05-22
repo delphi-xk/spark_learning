@@ -38,7 +38,7 @@ object ModelEvaluation extends App{
   println(s"area under curve: ${areaUnderCurve(simplePoints)}")
   //outputPointArray("d:/roc-simple-points.csv", simplePoints)
 
-
+  // calculate cumulative ratio for ks test
   def countCumulativeRatio(threshold:Double, data:Array[(Double, Int)]): (Double, Double) = {
     val selectData = data.filter(_._1 <= threshold)
     val posData = selectData.count(_._2 == 1)
@@ -51,7 +51,7 @@ object ModelEvaluation extends App{
   }
 
 
-  // TPR = TP / P, FPR = FP / N
+  // calculate ratio for roc curve, TPR = TP / P, FPR = FP / N
   def countTrueAndFalsePositiveRatio(theshold:Double, data:Array[(Double, Int)]): (Double, Double) = {
     val totalPos = data.count(_._2 == 1)
     val totalNeg = data.count(_._2 == 0)
@@ -62,14 +62,18 @@ object ModelEvaluation extends App{
     (FPR, TPR)
   }
 
+  // return decimal value in scale
   def getDecimalValue(num:Double, scale:Int = 5): BigDecimal={
     BigDecimal(num).setScale(scale, RoundingMode.HALF_UP)
   }
+
+  // find ks value: max absolute distance
   def findKSValue(pointArray:Array[(Double, Double)]): Double = {
     val ksVal = pointArray.map(point => math.abs(point._1 - point._2))
     ksVal.max
   }
 
+  // remove points by scale
   def simplifyPointByScale(pointArray:Array[(Double, Double)],
                            scale:Integer = 2): Array[(Double, Double)] = {
     pointArray.map(datum =>

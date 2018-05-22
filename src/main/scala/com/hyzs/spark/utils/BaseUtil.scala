@@ -38,8 +38,8 @@ object BaseUtil {
     case _ => throw new ClassCastException("unsupported class")
   }
 
-  def anySeqToRow[T](x:Any): Row = x match {
-    case a: Array[T] => Row(a.map(toDoubleDynamic))
+  def anySeqToRow(x:Any): Row = x match {
+    case a: Array[Any] => Row(a.map(toDoubleDynamic))
     case s: Seq[Any] => Row(s.map(toDoubleDynamic))
     case r: Row => Row(r.toSeq.map(toDoubleDynamic))
     case _ => throw new ClassCastException("unsupported class")

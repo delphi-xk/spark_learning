@@ -8,7 +8,7 @@ import com.hyzs.spark.utils.SparkUtils._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.ml.feature.{MinMaxScaler, VectorAssembler}
-import org.apache.spark.mllib.linalg.{Matrices, Vector}
+import org.apache.spark.ml.linalg.{Matrices, Vector}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import com.hyzs.spark.utils.SparkUtils._
@@ -16,7 +16,8 @@ import com.hyzs.spark.utils.SparkUtils._
 object JDDataProcess {
 
   val originalKey = "user_id"
-  val key = "user_id_md5"
+  //val key = "user_id_md5"
+  val key = "id"
   import spark.implicits._
 
   def processHis(df: DataFrame): DataFrame = {
@@ -31,9 +32,11 @@ object JDDataProcess {
   }
 
   // ensure countCols can be counted(cast double)
-  def labelGenerateProcess(taskName:String, countCols: Array[String], weight: Array[Double]): DataFrame = {
+  def labelGenerateProcess(allData:Dataset[Row],
+                           taskName:String,
+                           countCols: Array[String],
+                           weight: Array[Double]): DataFrame = {
     if( countCols.length == weight.length){
-      val allData = spark.sql("select * from hyzs.all_data")
       val selectCols = countCols.map( col => s"cast ($col as double) $col")
       val label_data = processEmpty(allData, countCols)
         .selectExpr(key +: selectCols : _*)
@@ -72,13 +75,15 @@ object JDDataProcess {
   // process empty value for label generation
   def processEmpty(df: DataFrame, cols: Seq[String]): DataFrame = {
     df.na.fill("0.0")
-      .na.replace(cols, Map("" -> "0.0","null" -> "0.0", "NULL" -> "0.0"))
+      .na.fill(0.0)
+      .na.replace(cols, Map("" -> "0.0","null" -> "0.0", "NULL" -> "0.0", -9999 -> 0))
    //   .dropDuplicates(Seq(key))
   }
 
   def processNull(df: DataFrame): DataFrame = {
     df.na.fill("")
-      .na.replace("*", Map("null" -> "", "NULL" -> "", "-9999" -> ""))
+      .na.fill(0.0)
+      .na.replace("*", Map("null" -> "", "NULL" -> "", "-9999" -> "", -9999 -> 0))
   }
 
   // generate label table and split data
@@ -93,13 +98,13 @@ object JDDataProcess {
         (Array("mem_vip_f0011", "mem_vip_f0001"), Array(0.5, 0.5))
     )
     for( (task, params) <- labelProcessMap) {
-      val labelTable = labelGenerateProcess(task, params._1, params._2)
+      val labelTable = labelGenerateProcess(allData, task, params._1, params._2)
       saveTable(labelTable, s"${task}_label")
       val dataTable = dataGenerateProcess(allData, params._1 :+ originalKey)
       val splitData = dataTable.randomSplit(Array(0.7, 0.2, 0.1))
       val train = splitData(0)
       val valid = splitData(1)
-      val test = splitData(2)
+      val test = dataTable
       saveTable(train, s"${task}_train")
       saveTable(valid, s"${task}_valid")
       saveTable(test, s"${task}_test")
@@ -151,8 +156,7 @@ object JDDataProcess {
 
   }
 
-  def main(args: Array[String]): Unit = {
-
+  def processJDdata(args: Array[String]): Unit = {
     spark.sql("create database IF NOT EXISTS hyzs ")
     val resTable = Option(conf.get("spark.processJob.resultTable")).getOrElse("sample_all")
     val tableStr = Option(conf.get("spark.processJob.fileNames")).getOrElse("all_data")
@@ -177,8 +181,8 @@ object JDDataProcess {
         val headerPath=s"$header$tableName.txt"
         val dataPath=s"$data$tableName.txt"
         val table = createDFfromBadFile(headerPath=headerPath, dataPath=dataPath, logPath = tableName)
-           .drop(originalKey)
-           .repartition(numPartitions = partitionNums, col(key))
+          .drop(originalKey)
+          .repartition(numPartitions = partitionNums, col(key))
         saveTable(table, tableName)
       }
     }
@@ -207,6 +211,13 @@ object JDDataProcess {
     } else {
       trainModelData(result.get)
     }
+
+  }
+
+
+  def main(args: Array[String]): Unit = {
+
+
 
   }
 
