@@ -19,6 +19,7 @@ import org.apache.spark.sql.types._
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import com.hyzs.spark.sql.JDDataProcess
+import org.apache.spark.sql.expressions.UserDefinedFunction
 
 /**
   * Created by XIANGKUN on 2018/4/24.
@@ -30,6 +31,7 @@ object ConvertLibsvm_v2 {
   //val key = "user_id_md5"
   val key = "id"
   val maxLabelMapLength = 20
+  import spark.implicits._
 
   def getIndexers(df: Dataset[Row], col: String): (String, StringIndexerModel) = {
     val indexer = new StringIndexer()
@@ -40,6 +42,13 @@ object ConvertLibsvm_v2 {
     (col,indexer)
   }
 
+  def strToIndex(labels:Array[String]):UserDefinedFunction = udf((str:String) => {
+    labels.zipWithIndex
+      .toMap
+      .getOrElse(str, 0)
+  })
+
+
   def replaceIndexedCols(df:Dataset[Row], cols:Seq[String]): Dataset[Row] = {
     val remainCols = df.columns diff cols
     val replaceExprs = cols.map( col => s" ${col}_indexer as $col")
@@ -48,17 +57,22 @@ object ConvertLibsvm_v2 {
 
   def replaceOldCols(df:Dataset[Row],
                   idCols:Seq[String],
-                  stringCols:Seq[String],
+                     labelArray:Seq[(String, Array[String])],
                   timeCols:Seq[String],
                   numberCols:Seq[String],
                   allCols:Seq[String]): Dataset[Row] = {
-    // add string index start with 1
-    val strExprs = stringCols.map(col => s" (${col}_indexer + 1) as $col")
-    val timeExprs = timeCols.map(col => s" stamp($col) as $col")
-    val numberExprs = numberCols.map(col =>  s" cast($col as double) $col")
-    spark.udf.register("stamp", castTimestampFuc _)
 
-    df.selectExpr(idCols ++: strExprs ++: timeExprs ++: numberExprs :_*)
+    // spark.udf.register("stamp", castTimestampFuc _)
+    //val timeUdf = udf(castTimestampFuc _)
+
+    val ids = idCols.map(col)
+    val strings = labelArray.map{ datum =>
+      strToIndex(datum._2)(col(datum._1)).as(datum._1)
+    }
+    val times = timeCols.map(colName => unix_timestamp(col(colName), "yyyy-MM-dd' 'HH:mm:ss").as(colName))
+    val numbers = numberCols.map(colName => col(colName).cast("double").as(colName))
+
+    df.select(ids ++: strings ++:times ++: numbers :_*)
       .selectExpr(allCols: _*)
   }
 
@@ -146,8 +160,9 @@ object ConvertLibsvm_v2 {
     JDDataProcess.trainModelData(processNull(data))
   }
 
-  def convertLibsvm(args: Array[String]): Unit ={
-    val tables = Seq("m1_train")
+  def convertLibsvm(): Unit ={
+    val args = Array("no_import", "train")
+    val tables = Seq("m1_test")
     val labels = Seq("m1_label")
 
     val convertPath = "/hyzs/model/"
@@ -161,9 +176,12 @@ object ConvertLibsvm_v2 {
       val resultPath = s"${taskPath}result"
 
       val sourceData = spark.table(tableName)
-      val label = spark.table(labelName)
+      val allLabel = spark.table(labelName).randomSplit(Array(0.8,0.2))
+      val label = allLabel(0)
+      val labelForTest = allLabel(1)
+      saveTable(labelForTest, "m1_label_test")
       // join process based on id in data table
-      val fullData = label.join(sourceData, Seq(key), "right")
+      val fullData = label.join(sourceData, Seq(key), "left")
 
       val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row(0).toString)
       val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row(0).toString)
@@ -174,7 +192,7 @@ object ConvertLibsvm_v2 {
       val nameRdd = sc.makeRDD[String](sourceData.columns)
 
       val allCols = result.columns
-      val idCols = result.columns.take(2)
+      val idAndLabelCols = result.columns.take(2)
       val dataCols = result.columns.drop(2)
       val dataSchema: Seq[StructField] = result.schema.drop(2)
       val stringSchema = dataSchema.filter(field => field.dataType == StringType)
@@ -182,47 +200,41 @@ object ConvertLibsvm_v2 {
       val stringCols = stringSchema.map(field => field.name)
       val timeCols = timeSchema.map(field => field.name)
       val numberCols = dataCols diff stringCols diff timeCols
-      val indexerArray = stringSchema.map(field => getIndexers(result, field.name))
-      val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
+      val indexerArray = stringCols.map(field => getIndexers(result, field))
+      val labelArray:Seq[(String, Array[String])] = indexerArray.map(datum => (datum._1, datum._2.labels))
 
-      if(args.length >0 && args(0) == "import_table"){
-        result = spark.table(s"${tableName}_libsvm")
-      }
-      else{
-        if(args.length >1 && args(1) == "predict"){
-          val pipeline = Pipeline.load(modelPath)
-          result = pipeline.fit(result).transform(result)
+      //val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
 
-        } else if(args.length >1 && args(1) == "train"){
-          // spark 2.2 inferSchema removed
-          val objRdd = buildObjRdd(dataSchema, indexerArray)
+      if(args.length >1 && args(1) == "predict"){
+        val pipeline = Pipeline.load(modelPath)
+        result = pipeline.fit(result).transform(result)
 
-          if(checkHDFileExist(modelPath))dropHDFiles(modelPath)
-          pipeline.save(modelPath)
+      } else if(args.length >1 && args(1) == "train"){
 
-          result = pipeline.fit(result).transform(result)
-          println("start save obj...")
-          saveRdd(objRdd, objPath)
-          println("start save name...")
-          saveRdd(nameRdd, namePath)
-          mkHDdir(resultPath)
-          copyMergeHDFiles(s"$objPath/", s"$resultPath/$tableName.obj")
-          copyMergeHDFiles(s"$namePath/", s"$resultPath/$tableName.name")
-          println("save obj name finished.")
-        }
+        val objRdd = buildObjRdd(dataSchema, indexerArray)
 
-        result = replaceOldCols(result, idCols, stringCols, timeCols, numberCols, allCols)
+        if(checkHDFileExist(modelPath))dropHDFiles(modelPath)
 
-        println("start save libsvm table")
-        saveTable(result, s"${tableName}_libsvm")
+        //pipeline.save(modelPath)
+        //result = pipeline.fit(result).transform(result)
+
+        println("start save obj...")
+        saveRdd(objRdd, objPath)
+        println("start save name...")
+        saveRdd(nameRdd, namePath)
+        mkHDdir(resultPath)
+        copyMergeHDFiles(s"$objPath/", s"$resultPath/$tableName.obj")
+        copyMergeHDFiles(s"$namePath/", s"$resultPath/$tableName.name")
+        println("save obj name finished.")
       }
 
-      println("start save libsvm file")
-      val libsvm: RDD[String] = result.rdd.mapPartitions(rows => {
-        rows.map{ row => {
+      result = replaceOldCols(result, idAndLabelCols, labelArray, timeCols, numberCols, allCols)
+      saveTable(result, "m1_test_libsvm")
+
+     /* println("start save libsvm file")
+      val libsvm: RDD[String] = result.rdd.map(row => {
           val datum = row.toSeq
           castLibsvmString(datum(1).toString, datum.drop(2))
-        }}
       })
 
       saveRdd(libsvm, libsvmPath)
@@ -231,13 +243,13 @@ object ConvertLibsvm_v2 {
       mkHDdir(resultPath)
       copyMergeHDFiles(s"$libsvmPath/", s"$resultPath/$tableName.libsvm")
       copyMergeHDFiles(s"$indexPath/", s"$resultPath/$tableName.index")
-      println("merge file finished.")
+      println("merge file finished.")*/
     }
   }
 
   def main(args: Array[String]): Unit = {
-    prepareDataTable
-    //convertLibsvm(args)
+    //prepareDataTable
+    convertLibsvm()
 
   }
 }

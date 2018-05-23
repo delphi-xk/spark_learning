@@ -39,7 +39,7 @@ object SparkUtils {
   //mapper.registerModule(DefaultScalaModule)
   val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)
   import spark.implicits._
-
+  import spark.sqlContext.implicits._
 
   def checkHDFileExist(filePath: String): Boolean = {
     val path = new Path(filePath)
@@ -164,13 +164,13 @@ object SparkUtils {
   }
 
   // for test
-  case class Person(name : String , age : Int)
+/*  case class Person(name : String , age : Int)
 
   def createDatasetTest(): Unit ={
     val personRDD = sc.makeRDD(Seq(Person("A",10),Person("B",20)))
     val personDF = spark.createDataFrame(personRDD)
     val ds:Dataset[Person] = personDF.as[Person]
-  }
+  }*/
 
 }
 
