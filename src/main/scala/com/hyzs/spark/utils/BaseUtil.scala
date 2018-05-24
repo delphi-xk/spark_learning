@@ -15,6 +15,9 @@ object BaseUtil {
 
   val dateFormat = new SimpleDateFormat("yyyy-MM-dd' 'HH:mm:ss")
 
+  def castTimestampFuc(time:String): Long = {
+    getUnixStamp(time).getOrElse(0)
+  }
 
   def getUnixStamp(stamp:String): Option[Long] = stamp match {
     case "" => None

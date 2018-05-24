@@ -33,8 +33,7 @@ object SparkUtils {
 
   val partitionNums: Int = conf.getOption("spark.sql.shuffle.partitions").getOrElse("200").toInt
   val invalidRowPath = "/hyzs/invalidRows/"
-  val mapper = new ObjectMapper()
-  mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+  val mapper = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
   // NOTE: not serializable, cannot initialize class.
   //mapper.registerModule(DefaultScalaModule)
   val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)
@@ -74,8 +73,9 @@ object SparkUtils {
   }
 
   def processNull(df: Dataset[Row]): Dataset[Row] = {
-    df.na.fill("")
-      .na.replace("*", Map("null" -> "", "NULL" -> "", "-9999" -> "", -9999 -> 0))
+    df.na.fill(0.0)
+      .na.fill("0.0")
+      .na.replace("*", Map("" -> "0.0", "null" -> "0.0", -9999 -> 0.0))
   }
 
   def saveTable(df: Dataset[Row], tableName:String, dbName:String = "default"): Unit = {

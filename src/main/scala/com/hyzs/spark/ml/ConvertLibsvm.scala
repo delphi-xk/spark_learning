@@ -240,15 +240,6 @@ object ConvertLibsvm {
     objList
   }
 
-  def getStructToJson(dataSchema:StructType): RDD[String] = {
-    val structArray = (1 to dataSchema.length).zip(dataSchema).map{ case (index,field) =>
-      val info = StructInfo(index, field.name, field.dataType.typeName)
-      broadMapper.value.registerModule(DefaultScalaModule)
-      broadMapper.value.writeValueAsString(info)
-    }
-    sc.makeRDD(structArray)
-  }
-
   def castLibsvmString(label:String="0.0", row: Row): String = {
     val datum = row.toSeq
     val resString = new StringBuilder(label)

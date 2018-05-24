@@ -14,7 +14,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{col, _}
 import org.apache.spark.sql.types._
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -30,7 +30,7 @@ object ConvertLibsvm_v2 {
   val originalKey = "user_id"
   //val key = "user_id_md5"
   val key = "id"
-  val maxLabelMapLength = 20
+  val maxLabelMapLength = 100
   import spark.implicits._
 
   def getIndexers(df: Dataset[Row], col: String): (String, StringIndexerModel) = {
@@ -42,42 +42,42 @@ object ConvertLibsvm_v2 {
     (col,indexer)
   }
 
-  def strToIndex(labels:Array[String]):UserDefinedFunction = udf((str:String) => {
+/*  def strToIndex(labels:Array[String]):UserDefinedFunction = udf((str:String) => {
     labels.zipWithIndex
       .toMap
       .getOrElse(str, 0)
-  })
+  })*/
 
-
-  def replaceIndexedCols(df:Dataset[Row], cols:Seq[String]): Dataset[Row] = {
-    val remainCols = df.columns diff cols
-    val replaceExprs = cols.map( col => s" ${col}_indexer as $col")
-    df.selectExpr(remainCols ++: replaceExprs: _*)
+  def strToLabel(stringMap:Map[String,Int])(str:String): Int = {
+    stringMap.getOrElse(str, 0)
   }
 
-  def replaceOldCols(df:Dataset[Row],
-                  idCols:Seq[String],
-                     labelArray:Seq[(String, Array[String])],
-                  timeCols:Seq[String],
-                  numberCols:Seq[String],
-                  allCols:Seq[String]): Dataset[Row] = {
+  def replaceOldCols(df:Dataset[Row], objArray:Array[ModelObject]): Dataset[Row] = {
 
     // spark.udf.register("stamp", castTimestampFuc _)
     //val timeUdf = udf(castTimestampFuc _)
 
-    val ids = idCols.map(col)
-    val strings = labelArray.map{ datum =>
-      strToIndex(datum._2)(col(datum._1)).as(datum._1)
+/*    val strings = labelArray.map{ datum =>
+      val func: String => Int = strToLabel(datum._2)
+      val labelUdf = udf(func)
+      labelUdf(col(datum._1)).as(datum._1)
+    }*/
+
+    val newColNames:Array[Column] = objArray.map{ obj =>
+      val colName:Column = obj.fieldType match {
+        case Params.NO_TYPE => col(obj.fieldName)
+        case Params.NUMERIC_TYPE => col(obj.fieldName).cast("double").as(obj.fieldName)
+        case Params.DATE_TYPE => unix_timestamp(col(obj.fieldName), "yyyy-MM-dd' 'HH:mm:ss")
+          .as(obj.fieldName)
+        case Params.STRING_TYPE => {
+          val stringUdf = udf(strToLabel(obj.fieldMap) _)
+          stringUdf(col(obj.fieldName)).as(obj.fieldName)
+        }
+        case _ => col(obj.fieldName).cast("double").as(obj.fieldName)
+      }
+      colName
     }
-    val times = timeCols.map(colName => unix_timestamp(col(colName), "yyyy-MM-dd' 'HH:mm:ss").as(colName))
-    val numbers = numberCols.map(colName => col(colName).cast("double").as(colName))
-
-    df.select(ids ++: strings ++:times ++: numbers :_*)
-      .selectExpr(allCols: _*)
-  }
-
-  def castTimestampFuc(time:String): Long = {
-    BaseUtil.getUnixStamp(time).getOrElse(0)
+    df.select(newColNames :_*)
   }
 
   def saveRdd(rdd:RDD[String], savePath:String): Unit = {
@@ -86,10 +86,10 @@ object ConvertLibsvm_v2 {
     rdd.saveAsTextFile(savePath)
   }
 
-  def buildObjRdd(dataSchema:Seq[StructField],
-                  indexerArray:Seq[(String,StringIndexerModel)]): RDD[String] = {
-    val objList:ListBuffer[BaseObj] = new ListBuffer
-    objList += Ob1(0, Params.NO_TYPE, key)
+  def buildObjectArray(dataSchema:Seq[StructField],
+                  indexerArray:Seq[(String,StringIndexerModel)]): Array[ModelObject] = {
+    val objList:ArrayBuffer[ModelObject] = new ArrayBuffer
+    objList += ModelObject(0, Params.NO_TYPE, key, Map())
     val indexerMap: Map[String,Map[String,Int]] = indexerArray.map{ case (name,model) =>
       if(model.labels.length<maxLabelMapLength)
         (name, model.labels.zip(1 to model.labels.length).toMap)
@@ -100,47 +100,57 @@ object ConvertLibsvm_v2 {
     }.toMap
     (1 to dataSchema.length).zip(dataSchema).foreach{ case (index, field) =>
       val obj = field.dataType match {
-        case IntegerType => Ob1(index, Params.NUMERIC_TYPE, field.name)
-        case DoubleType => Ob1(index, Params.NUMERIC_TYPE, field.name)
-        case DateType => Ob1(index, Params.DATE_TYPE, field.name)
-        case TimestampType => Ob1(index, Params.DATE_TYPE, field.name)
-        case StringType => Ob2(index, Params.STRING_TYPE, field.name,
+        case IntegerType => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
+        case DoubleType => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
+        case DateType => ModelObject(index, Params.DATE_TYPE, field.name, Map())
+        case TimestampType => ModelObject(index, Params.DATE_TYPE, field.name, Map())
+        case StringType => ModelObject(index, Params.STRING_TYPE, field.name,
           indexerMap.getOrElse(field.name, Map("null"->0)))
-        case _ => Ob1(index, Params.NUMERIC_TYPE, field.name)
+        case _ => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
       }
       objList += obj
     }
-    val objRdd = sc.parallelize(objList)
-        //.coalesce(1, true)
-      //.sortBy(obj => obj.key)
+    objList.toArray
+  }
+
+  def buildObjectJsonRdd(objList:Array[ModelObject]): RDD[String] = {
+    /*    val objRdd = sc.parallelize(objList)
     val objStr = objRdd.mapPartitions( objs => {
       val mapper = new ObjectMapper
       mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
       mapper.registerModule(DefaultScalaModule)
       objs.map(obj => mapper.writeValueAsString(obj))
     })
+    objStr*/
+
+    /*    broadcast class not initialized issue
+        val resString = objList.map( obj => {
+          broadMapper.value.registerModule(DefaultScalaModule)
+          broadMapper.value.writeValueAsString(obj)
+        })
+        sc.makeRDD[String](resString)
+    */
+    val objRdd:RDD[ModelObject] = sc.parallelize(objList)
+    val objStr:RDD[String] = objRdd.mapPartitions({ iter:Iterator[ModelObject] =>
+      val mapper = new ObjectMapper
+      mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+      mapper.registerModule(DefaultScalaModule)
+      for(obj <- iter) yield mapper.writeValueAsString(obj)
+    })
     objStr
 
   }
 
-  def readObj(filePath:String): Array[Ob1] = {
+
+  def readObj(filePath:String): Array[ModelObject] = {
     val objRdd = sc.textFile(filePath)
     val objList = objRdd.mapPartitions({ records =>
       val mapper = new ObjectMapper
       mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
       mapper.registerModule(DefaultScalaModule)
-      records.map(record => mapper.readValue(record, classOf[Ob1]))
+      records.map(record => mapper.readValue(record, classOf[ModelObject]))
     }).collect()
     objList
-  }
-
-  def getStructToJson(dataSchema:StructType): RDD[String] = {
-    val structArray = (1 to dataSchema.length).zip(dataSchema).map{ case (index,field) =>
-      val info = StructInfo(index, field.name, field.dataType.typeName)
-      broadMapper.value.registerModule(DefaultScalaModule)
-      broadMapper.value.writeValueAsString(info)
-    }
-    sc.makeRDD(structArray)
   }
 
   def castLibsvmString(label:String="0.0", datum: Seq[Any]): String = {
@@ -160,8 +170,10 @@ object ConvertLibsvm_v2 {
     JDDataProcess.trainModelData(processNull(data))
   }
 
-  def convertLibsvm(): Unit ={
-    val args = Array("no_import", "train")
+
+  def convertLibsvm(args:Array[String]): Unit ={
+    //TODO: switch libsvm with or without label table
+    //val args = Array("train")
     val tables = Seq("m1_test")
     val labels = Seq("m1_label")
 
@@ -179,44 +191,36 @@ object ConvertLibsvm_v2 {
       val allLabel = spark.table(labelName).randomSplit(Array(0.8,0.2))
       val label = allLabel(0)
       val labelForTest = allLabel(1)
-      saveTable(labelForTest, "m1_label_test")
+
       // join process based on id in data table
       val fullData = label.join(sourceData, Seq(key), "left")
 
       val labelRdd:RDD[String] = fullData.select("label").rdd.map(row => row(0).toString)
       val indexRdd:RDD[String] = fullData.select(key).rdd.map(row => row(0).toString)
-      var result:Dataset[Row] = fullData //.drop(key).drop("label")
-        .na.fill(0.0)
-        .na.fill("0.0")
-        .na.replace("*", Map("" -> "0.0", "null" -> "0.0"))
+      var result:Dataset[Row] = processNull(fullData)
       val nameRdd = sc.makeRDD[String](sourceData.columns)
+      var objectArray:Array[ModelObject] = null
 
-      val allCols = result.columns
-      val idAndLabelCols = result.columns.take(2)
-      val dataCols = result.columns.drop(2)
-      val dataSchema: Seq[StructField] = result.schema.drop(2)
-      val stringSchema = dataSchema.filter(field => field.dataType == StringType)
-      val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
-      val stringCols = stringSchema.map(field => field.name)
-      val timeCols = timeSchema.map(field => field.name)
-      val numberCols = dataCols diff stringCols diff timeCols
-      val indexerArray = stringCols.map(field => getIndexers(result, field))
-      val labelArray:Seq[(String, Array[String])] = indexerArray.map(datum => (datum._1, datum._2.labels))
+      if(args.length >0 && args(0) == "predict"){
 
-      //val pipeline = new Pipeline().setStages(Array(indexerArray.map(_._2): _*))
+        objectArray = readObj(s"$resultPath/$tableName.obj")
 
-      if(args.length >1 && args(1) == "predict"){
-        val pipeline = Pipeline.load(modelPath)
-        result = pipeline.fit(result).transform(result)
+      } else if(args.length >0 && args(0) == "train"){
+        val allCols = result.columns
+        val idAndLabelCols = result.columns.take(2)
+        val dataCols = result.columns.drop(2)
+        val dataSchema: Seq[StructField] = result.schema.drop(2)
+        val stringSchema = dataSchema.filter(field => field.dataType == StringType)
+        val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
+        val stringCols = stringSchema.map(field => field.name)
+        val timeCols = timeSchema.map(field => field.name)
+        val numberCols = dataCols diff stringCols diff timeCols
 
-      } else if(args.length >1 && args(1) == "train"){
-
-        val objRdd = buildObjRdd(dataSchema, indexerArray)
+        val indexerArray = stringCols.map(field => getIndexers(result, field))
+        objectArray = buildObjectArray(dataSchema, indexerArray)
+        val objRdd:RDD[String] = buildObjectJsonRdd(objectArray)
 
         if(checkHDFileExist(modelPath))dropHDFiles(modelPath)
-
-        //pipeline.save(modelPath)
-        //result = pipeline.fit(result).transform(result)
 
         println("start save obj...")
         saveRdd(objRdd, objPath)
@@ -228,10 +232,9 @@ object ConvertLibsvm_v2 {
         println("save obj name finished.")
       }
 
-      result = replaceOldCols(result, idAndLabelCols, labelArray, timeCols, numberCols, allCols)
-      saveTable(result, "m1_test_libsvm")
+      result = replaceOldCols(result, objectArray)
 
-     /* println("start save libsvm file")
+      println("start save libsvm file")
       val libsvm: RDD[String] = result.rdd.map(row => {
           val datum = row.toSeq
           castLibsvmString(datum(1).toString, datum.drop(2))
@@ -243,13 +246,13 @@ object ConvertLibsvm_v2 {
       mkHDdir(resultPath)
       copyMergeHDFiles(s"$libsvmPath/", s"$resultPath/$tableName.libsvm")
       copyMergeHDFiles(s"$indexPath/", s"$resultPath/$tableName.index")
-      println("merge file finished.")*/
+      println("merge file finished.")
     }
   }
 
   def main(args: Array[String]): Unit = {
     //prepareDataTable
-    convertLibsvm()
+    convertLibsvm(args)
 
   }
 }
