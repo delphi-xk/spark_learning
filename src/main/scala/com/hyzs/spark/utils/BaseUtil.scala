@@ -13,6 +13,7 @@ import scala.util.{Failure, Success, Try}
   */
 object BaseUtil {
 
+  //TODO: implicit conversion
   val dateFormat = new SimpleDateFormat("yyyy-MM-dd' 'HH:mm:ss")
 
   def castTimestampFuc(time:String): Long = {

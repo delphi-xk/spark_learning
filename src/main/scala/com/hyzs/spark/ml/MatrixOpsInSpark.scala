@@ -12,7 +12,8 @@ import org.apache.spark.sql.{Dataset, Row}
   */
 object MatrixOpsInSpark {
 
-  def kmeansTest(): Unit ={
+
+  def importDataset(): Unit ={
     val data: Dataset[Row] = spark.read
       .format("csv")
       .option("inferSchema", "true")
@@ -28,7 +29,11 @@ object MatrixOpsInSpark {
     ))
 
     val dataset:Dataset[Row] = spark.createDataFrame(rdd, schema)
+    dataset.write.saveAsTable("vector_test")
+  }
 
+  def kmeansTest(): Unit ={
+    val dataset = spark.table("vector_test")
     // Trains a k-means model.
     val kmeans = new KMeans().setK(2).setSeed(1L)
     val model = kmeans.fit(dataset)
