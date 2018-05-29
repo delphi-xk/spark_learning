@@ -2,3 +2,5 @@
 .idea/
 target/
 dependency-reduced-pom.xml
+src/main/pic/
+src/test/script/
