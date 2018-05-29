@@ -1,6 +1,0 @@
-<configuration>
-    <property>
-      <name>hive.metastore.uris</name>
-      <value>thrift://hadoop2:9083</value>
-    </property>
-</configuration>
