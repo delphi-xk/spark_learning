@@ -109,19 +109,6 @@ class ScalaTest extends FunSuite{
     println(anySeqToSparkVector(row.toSeq))
   }
 
-  test("test read csv file"){
-    val csvFile = readCsvFile("d:/test0515.csv")
-    for(i <- 0 until 10){
-      println(csvFile(i).mkString(","))
-    }
-  }
-
-  test("Gaussion random test"){
-    generateScores("good_score_test", 0.3,0.01, 0.8,0.01)
-    generateScores("bad_score_test", 0.4,1, 0.6,1)
-    generateScores("mid_score_test", 0.2,0.5, 0.9,0.5)
-  }
-
   def reformatRandom(num:Double, min:Double = 0.0,max:Double = 1.0):Double = {
     if(num < min) min
     else if(num > max) max
@@ -135,68 +122,72 @@ class ScalaTest extends FunSuite{
     for(i <- 0 until 100000){
       writer.write(reformatRandom(getGaussionRandom(e1, v1, random1)) +",0\n")
     }
-    for(i <- 0 until 1000){
+    for(i <- 0 until 2000){
       writer.write(reformatRandom(getGaussionRandom(e2, v2, random2)) +",1\n")
     }
     writer.close()
   }
 
-  test("test RMSE "){
-    // data : score, label
+  test("test read csv file"){
     val testData: Array[(Double, Double)] = readCsvFile("d:/test0515.csv").drop(1)
       .map(row => (row(0).toDouble, row(1).toDouble))
-    println("test score====")
-    computeRMSE(testData)
-
-    val goodData: Array[(Double, Double)] = readCsvFile("d:/good_score_test.csv")
-      .map(row => (row(0).toDouble, row(1).toDouble))
-    println("good score====")
-    computeRMSE(goodData)
-
-    val midData: Array[(Double, Double)] = readCsvFile("d:/mid_score_test.csv")
-      .map(row => (row(0).toDouble, row(1).toDouble))
-    println("middle score====")
-    computeRMSE(midData)
-
-    val badData: Array[(Double, Double)] = readCsvFile("d:/bad_score_test.csv")
-      .map(row => (row(0).toDouble, row(1).toDouble))
-    println("bad score====")
-    computeRMSE(badData)
+    val posData = testData.filter( field => field._2 == 1.0)
+    val negData = testData.filter( field => field._2 == 0.0)
+    println("pos num: "+ posData.length)
+    println("neg num: "+ negData.length)
 
   }
 
-  test("test auc"){
+  test("Gaussion random test"){
+    generateScores("good_score_test", 0.3,0.1, 0.8,0.1)
+    generateScores("mid_score_test", 0.3,0.5, 0.8,0.5)
+    generateScores("bad_score_test", 0.4,1, 0.7,1)
+
+  }
+
+  test("test auc ks rmse"){
     // data : score, label
     //val testData: Array[(Double, Double)] = readCsvFile("d:/test0515.csv").drop(1)
     //val testData: Array[(Double, Double)] = readCsvFile("d:/good_score_test.csv")
-
-    val testData: Array[(Double, Double)] = readCsvFile("d:/test0515.csv").drop(1)
-      .map(row => (row(0).toDouble, row(1).toDouble))
-    println("test score====")
-    computeAUC(testData)
 
     val goodData: Array[(Double, Double)] = readCsvFile("d:/good_score_test.csv")
       .map(row => (row(0).toDouble, row(1).toDouble))
     println("good score====")
     computeAUC(goodData)
+    computeKS(goodData)
+    computeRMSE(goodData)
 
     val midData: Array[(Double, Double)] = readCsvFile("d:/mid_score_test.csv")
       .map(row => (row(0).toDouble, row(1).toDouble))
     println("middle score====")
     computeAUC(midData)
+    computeKS(midData)
+    computeRMSE(midData)
 
     val badData: Array[(Double, Double)] = readCsvFile("d:/bad_score_test.csv")
       .map(row => (row(0).toDouble, row(1).toDouble))
     println("bad score====")
     computeAUC(badData)
+    computeKS(badData)
+    computeRMSE(badData)
+  }
+
+  test("test data calculation"){
+    val testData: Array[(Double, Double)] = readCsvFile("d:/test0515.csv").drop(1)
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("test score====")
+    computeAUC(testData)
+    computeKS(testData)
+    computeRMSE(testData)
   }
 
   test("gaussion dis simu test"){
-    generateScores("simu_score_test", 0.15,0.1, 0.9,1.0)
+    generateScores("simu_score_test", 0.15,0.1, 0.7,0.3)
     val testData: Array[(Double, Double)] = readCsvFile("d:/simu_score_test.csv")
       .map(row => (row(0).toDouble, row(1).toDouble))
     println("simu score test====")
     computeAUC(testData)
+    computeKS(testData)
     computeRMSE(testData)
   }
 }

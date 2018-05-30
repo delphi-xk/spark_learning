@@ -31,15 +31,16 @@ object ModelEvaluation extends App{
   }
 
   def computeKS(testData:Array[(Double,Double)]): Unit ={
-    val sortedData = testData.sortBy(_._1)
+    val simpleData = simplifyPointByScale(testData, 2)
+    val sortedData = simpleData.sortBy(_._1)
     val threVal = sortedData.map( _._1).distinct
 
     val ksPointArray: Array[(Double, Double)] = threVal
       .map( thred => countCumulativeRatio(thred, testData))
     println(s"ks value: "+ findKSValue(ksPointArray))
 
-    val ksPoints1: Array[(Double, Double)] = threVal.zip(ksPointArray.map(_._1))
-    val ksPoints2: Array[(Double, Double)] = threVal.zip(ksPointArray.map(_._2))
+    //val ksPoints1: Array[(Double, Double)] = threVal.zip(ksPointArray.map(_._1))
+    //val ksPoints2: Array[(Double, Double)] = threVal.zip(ksPointArray.map(_._2))
     //outputPointArray("d:/ks-points1.csv", simplifyPointByScale(ksPoints1))
     //outputPointArray("d:/ks-points2.csv", simplifyPointByScale(ksPoints2))
   }
