@@ -7,7 +7,7 @@ import org.apache.spark.sql.Row
 
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 /**
   * Created by Administrator on 2018/2/5.
   */
@@ -57,6 +57,10 @@ object BaseUtil {
       resBuf.append(cols)
     }
     resBuf.toArray
+  }
+
+  def getGaussionRandom(expectation:Double = 0.0, variance:Double = 1.0, random:Random):Double = {
+    random.nextGaussian()* math.sqrt(variance) + expectation
   }
 
 }

@@ -3,6 +3,7 @@ import org.scalatest.FunSuite
 import scala.annotation.tailrec
 import java.io._
 
+import com.hyzs.spark.ml.ModelEvaluation._
 import com.hyzs.spark.utils.BaseUtil
 import com.hyzs.spark.utils.BaseUtil._
 import org.apache.spark.sql.Row
@@ -113,5 +114,89 @@ class ScalaTest extends FunSuite{
     for(i <- 0 until 10){
       println(csvFile(i).mkString(","))
     }
+  }
+
+  test("Gaussion random test"){
+    generateScores("good_score_test", 0.3,0.01, 0.8,0.01)
+    generateScores("bad_score_test", 0.4,1, 0.6,1)
+    generateScores("mid_score_test", 0.2,0.5, 0.9,0.5)
+  }
+
+  def reformatRandom(num:Double, min:Double = 0.0,max:Double = 1.0):Double = {
+    if(num < min) min
+    else if(num > max) max
+    else num
+  }
+
+  def generateScores(fileName:String, e1:Double, v1:Double, e2:Double, v2:Double): Unit ={
+    val writer = new PrintWriter(new File(s"d:/$fileName.csv"))
+    val random1 = Random
+    val random2 = Random
+    for(i <- 0 until 100000){
+      writer.write(reformatRandom(getGaussionRandom(e1, v1, random1)) +",0\n")
+    }
+    for(i <- 0 until 1000){
+      writer.write(reformatRandom(getGaussionRandom(e2, v2, random2)) +",1\n")
+    }
+    writer.close()
+  }
+
+  test("test RMSE "){
+    // data : score, label
+    val testData: Array[(Double, Double)] = readCsvFile("d:/test0515.csv").drop(1)
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("test score====")
+    computeRMSE(testData)
+
+    val goodData: Array[(Double, Double)] = readCsvFile("d:/good_score_test.csv")
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("good score====")
+    computeRMSE(goodData)
+
+    val midData: Array[(Double, Double)] = readCsvFile("d:/mid_score_test.csv")
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("middle score====")
+    computeRMSE(midData)
+
+    val badData: Array[(Double, Double)] = readCsvFile("d:/bad_score_test.csv")
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("bad score====")
+    computeRMSE(badData)
+
+  }
+
+  test("test auc"){
+    // data : score, label
+    //val testData: Array[(Double, Double)] = readCsvFile("d:/test0515.csv").drop(1)
+    //val testData: Array[(Double, Double)] = readCsvFile("d:/good_score_test.csv")
+
+    val testData: Array[(Double, Double)] = readCsvFile("d:/test0515.csv").drop(1)
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("test score====")
+    computeAUC(testData)
+
+    val goodData: Array[(Double, Double)] = readCsvFile("d:/good_score_test.csv")
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("good score====")
+    computeAUC(goodData)
+
+    val midData: Array[(Double, Double)] = readCsvFile("d:/mid_score_test.csv")
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("middle score====")
+    computeAUC(midData)
+
+    val badData: Array[(Double, Double)] = readCsvFile("d:/bad_score_test.csv")
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("bad score====")
+    computeAUC(badData)
+  }
+
+  test("gaussion dis simu test"){
+    generateScores("simu_score_test", 0.15,0.1, 0.9,1.0)
+    val testData: Array[(Double, Double)] = readCsvFile("d:/simu_score_test.csv")
+      .map(row => (row(0).toDouble, row(1).toDouble))
+    println("simu score test====")
+    computeAUC(testData)
+    computeRMSE(testData)
   }
 }

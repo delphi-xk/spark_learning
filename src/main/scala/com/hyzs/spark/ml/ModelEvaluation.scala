@@ -13,13 +13,6 @@ import scala.math.BigDecimal.RoundingMode
   */
 object ModelEvaluation extends App{
 
-  // data : score, label
-  val testData: Array[(Double, Double)] = readCsvFile("d:/test0515.csv").drop(1)
-    .map(row => (row(0).toDouble, row(1).toDouble))
-
-  //computeAUC(testData)
-  computeRMSE(testData)
-
 
   def computeRMSE(testData:Array[(Double,Double)]): Unit ={
     val summary = testData.map{ case (score, label) => Vectors.dense(label, label-score)}
@@ -30,10 +23,10 @@ object ModelEvaluation extends App{
 
     val SSerr = math.pow(summary.normL2(1), 2)
     val rmse = math.sqrt(SSerr / summary.count)
-    println("error variance:"+summary.variance(1))
-    println("error mean:"+summary.mean(1))
-    println("mean absolute error:"+ (summary.normL1(1)/ summary.count))
-    println("SSerr:"+SSerr)
+    //println("error variance:"+summary.variance(1))
+    //println("error mean:"+summary.mean(1))
+    //println("mean absolute error:"+ (summary.normL1(1)/ summary.count))
+    //println("SSerr:"+SSerr)
     println("rmse:"+rmse)
   }
 
@@ -52,7 +45,8 @@ object ModelEvaluation extends App{
   }
 
   def computeAUC(testData:Array[(Double,Double)]): Unit ={
-    val sortedData = testData.sortBy(_._1)
+    val simpleData = simplifyPointByScale(testData, 3)
+    val sortedData = simpleData.sortBy(_._1)
     val threVal = sortedData.map( _._1).distinct
 
     // from 0 to 1
@@ -60,10 +54,11 @@ object ModelEvaluation extends App{
       .map( thred => countTrueAndFalsePositiveRatio(thred, testData))
       .reverse
     val simplePoints = simplifyPointByScale(rocPointArray, 3)
-    //val simplePoints = Array( (0.0, 0.0), (0.05, 0.6))
-    for( point <- simplePoints){
+    // print points
+/*    for( point <- simplePoints){
       println(point)
-    }
+    }*/
+
     println(s"area under curve: ${areaUnderCurve(simplePoints)}")
     //outputPointArray("d:/roc-simple-points.csv", simplePoints)
   }
@@ -120,7 +115,7 @@ object ModelEvaluation extends App{
   }
 
   def areaUnderTwoPoint(x1:Double, y1:Double, x2:Double, y2:Double): Double = {
-    if(x1 != x2 && y1 != y2){
+    if(x1 != x2){
       (y1 + y2) * math.abs(x1 - x2) / 2
     } else 0
   }
