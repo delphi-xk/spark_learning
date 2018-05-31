@@ -9,17 +9,13 @@ import com.hyzs.spark.utils.SparkUtils._
 import com.hyzs.spark.utils.{BaseUtil, Params}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.{StringIndexer, StringIndexerModel, VectorAssembler}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, _}
 import org.apache.spark.sql.types._
-
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import com.hyzs.spark.sql.JDDataProcess
-import org.apache.spark.sql.expressions.UserDefinedFunction
+
 
 /**
   * Created by XIANGKUN on 2018/4/24.
@@ -169,6 +165,7 @@ object ConvertLibsvm_v2 {
     val data = spark.table("sample_all")
     JDDataProcess.trainModelData(processNull(data))
   }
+
 
 
   def convertLibsvm(args:Array[String]): Unit ={
