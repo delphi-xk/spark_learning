@@ -37,8 +37,6 @@ object SparkUtils {
   // NOTE: not serializable, cannot initialize class.
   //mapper.registerModule(DefaultScalaModule)
   val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)
-  import spark.implicits._
-  import spark.sqlContext.implicits._
 
   def checkHDFileExist(filePath: String): Boolean = {
     val path = new Path(filePath)

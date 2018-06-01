@@ -14,6 +14,7 @@ import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, Logi
   */
 object MatrixOpsInSpark {
 
+  import spark.implicits._
 
   def importDataset(): Unit ={
     val data: Dataset[Row] = spark.read
@@ -62,6 +63,8 @@ object MatrixOpsInSpark {
     println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
 
     val trainingSummary = lrModel.summary
+    println(s"training summary objectiveHistory: ${trainingSummary.objectiveHistory.mkString(",")}")
+    println(s"training summary totalIterations: ${trainingSummary.totalIterations}")
     val binarySummary = trainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
     val roc = binarySummary.roc
     roc.show()
