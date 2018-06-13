@@ -63,4 +63,14 @@ object BaseUtil {
     random.nextGaussian()* math.sqrt(variance) + expectation
   }
 
+  def trimStopWord(srcSeq:Array[String]):Array[String] = {
+    val resArray = new ArrayBuffer[String]
+    for( str <- srcSeq){
+      if(!isExistDigits(str))resArray.append(str)
+    }
+    resArray.toArray
+  }
+
+  def isExistDigits(x: String) = x exists Character.isDigit
+  def isAllDigits(x: String) = x forall Character.isDigit
 }

@@ -82,6 +82,7 @@ class BreezeTest extends FunSuite{
   }
 
   test("test matrix funcs"){
+
 /*    val gaussian = Gaussian(0.0, 1.0)
     val gau_matrix = new DenseMatrix(4, 4, gaussian.sample(16).toArray)*/
     val m = DenseMatrix((0.8, 0.8), (0.4, 0.6) )
