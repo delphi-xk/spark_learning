@@ -24,11 +24,14 @@ object SparkUtilsLocal {
   def processNull(df: Dataset[Row]): Dataset[Row] = {
     df.na.fill(0.0)
       .na.fill("0.0")
-      .na.replace("*", Map("" -> "0.0", "null" -> "0.0", -9999 -> 0.0))
+      .na.replace("*", Map("" -> "0.0",
+      "null" -> "0.0", "NULL" -> "0.0",
+      "-9999"->"0"))
+      .na.replace("*", Map(-9999 -> 0))
   }
 
   // process empty value for label generation
-  def processEmpty(df: Dataset[Row], cols: Seq[String]): Dataset[Row] = {
+  def processNullByCols(df: Dataset[Row], cols: Seq[String]): Dataset[Row] = {
     df.na.fill("0.0")
       .na.fill(0.0)
       .na.replace(cols, Map("" -> "0.0","null" -> "0.0", "NULL" -> "0.0", -9999 -> 0))
@@ -49,19 +52,6 @@ object SparkUtilsLocal {
 
   }
 
-  def delDir(path:File): Unit ={
-    if(!path.exists())
-      return
-    else if (path.isFile){
-      path.delete()
-      return
-    }
-    val file: Array[File] = path.listFiles()
-    for (d <- file) {
-      delDir(d)
-    }
-    path.delete()
-  }
 
 }
 

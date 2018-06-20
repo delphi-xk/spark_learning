@@ -50,7 +50,6 @@ object ConvertLibsvmLocal {
         case Params.NUMERIC_TYPE => col(obj.fieldName).cast("double").as(obj.fieldName)
         case Params.DATE_TYPE => unix_timestamp(col(obj.fieldName), "yyyy-MM-dd' 'HH:mm:ss")
           .as(obj.fieldName)
-            .when(col(obj.fieldName) === null, 0).otherwise()
         case Params.STRING_TYPE => {
           val stringUdf = udf(strToLabel(obj.fieldMap) _)
           stringUdf(col(obj.fieldName)).as(obj.fieldName)
@@ -59,7 +58,7 @@ object ConvertLibsvmLocal {
       }
       colName
     }
-    df.select(newColNames :_*)
+    df.select(newColNames :_*).na.fill(0.0)
   }
 
   def buildObjectArray(dataSchema:Seq[StructField],
@@ -132,7 +131,7 @@ object ConvertLibsvmLocal {
                            weight: Array[Double]): DataFrame = {
     if( countCols.length == weight.length){
       val selectCols = countCols.map( col => s"cast ($col as double) $col")
-      val label_data = processEmpty(allData, countCols)
+      val label_data = processNull(allData)
         .selectExpr(key +: selectCols : _*)
 
       // vector assembling
@@ -201,6 +200,7 @@ object ConvertLibsvmLocal {
   def convertLibsvm(args:Array[String]): Unit ={
     //TODO: switch libsvm with or without label table
     //val args = Array("train")
+    assert(args.length >= 1, "args length should be no less than 1! ")
     val tables = Seq("m1_test")
     val labels = Seq("m1_label")
 

@@ -1,5 +1,6 @@
 package com.hyzs.spark.utils
 
+import java.io.File
 import java.text.SimpleDateFormat
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -73,4 +74,19 @@ object BaseUtil {
 
   def isExistDigits(x: String) = x exists Character.isDigit
   def isAllDigits(x: String) = x forall Character.isDigit
+
+  def delDir(path:File): Unit ={
+    if(!path.exists())
+      return
+    else if (path.isFile){
+      path.delete()
+      return
+    }
+    val file: Array[File] = path.listFiles()
+    for (d <- file) {
+      delDir(d)
+    }
+    path.delete()
+  }
+
 }
