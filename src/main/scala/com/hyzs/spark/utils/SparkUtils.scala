@@ -157,6 +157,7 @@ object SparkUtils {
 
   }
 
+  // estimate object Java heap size
   def estimator[T](rdd: RDD[T]): Long = {
     SizeEstimator.estimate(rdd)
   }
