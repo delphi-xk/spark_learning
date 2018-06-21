@@ -217,6 +217,26 @@ object InferSchema {
     StructType(structs)
   }
 
+  def inferRDDSchema(datum: RDD[Row], columns:Seq[String]): StructType = {
+    val rdd = datum.map{ r =>
+      val row_seq = r.toSeq
+      row_seq.map{ col =>
+        if(col != null) col.toString
+        else ""
+      }.map(mapDataToType).toArray
+    }
+    val types = rdd.reduce(InferSchema.mergeRowTypes)
+    val structs = columns.zipAll(types,"NaCols", NullType)
+      .map{ case (colName, colType) =>
+        val rootType = colType match {
+          case NullType => StringType
+          case other => other
+        }
+        StructField(colName, rootType)
+      }
+    StructType(structs)
+  }
+
   def mapDataToType(datum: String): DataType = {
     InferSchema.inferField(NullType, datum)
   }
