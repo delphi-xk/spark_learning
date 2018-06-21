@@ -37,39 +37,6 @@ object ConvertLibsvm {
   //val fileName = "part-00000"
   val maxLabelLength = 10
   def convertDFtoLibsvm(): Unit = {
-    /*    val df = sqlContext.sql("select * from test_data")
-        val labelArray = df.select("jdmall_user_p0003").distinct.map(_.getString(0)).collect
-        val labelMap = labelArray.zipWithIndex.toMap*/
-
-    /*    val label = sqlContext.sql("select * from consume_label limit 100")
-        val test = label.join(df, Seq("user_id"), "left_outer")
-        val rdd_test: RDD[Vector] = test.rdd.map( row => Vectors.dense(row.getDouble(0), row.getDouble(2)) )*/
-
-    /*   val indexer = new StringIndexer()
-          .setInputCol("jdmall_user_p0003")
-          .setOutputCol("p0003_indexer")
-          .setHandleInvalid("skip")
-          .fit(df)
-          val converter = new IndexToString()
-             .setInputCol("p0003_indexer")
-             .setOutputCol("p0003_converter")
-             .setLabels(indexer.labels)
-           val indexer2 = new StringIndexer()
-             .setInputCol("mkt_schd_p0001328")
-             .setOutputCol("p0001328_indexer")
-             .setHandleInvalid("skip")
-             .fit(df)
-           val converter2 = new IndexToString()
-             .setInputCol("p0001328_indexer")
-             .setOutputCol("p0001328_converter")
-             .setLabels(indexer2.labels)
-
-           val pipeline = new Pipeline()
-             .setStages(Array(indexer, indexer2, converter, converter2))
-             .fit(df)
-           val res = pipeline.transform(df).select("user_id",
-             "jdmall_user_p0003","p0003_indexer", "p0003_converter",
-             "mkt_schd_p0001328","p0001328_indexer","p0001328_converter")*/
 
     val df = sqlContext.sql("select * from test_data")
 

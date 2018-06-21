@@ -26,12 +26,22 @@ object SparkUtils {
   val fs: FileSystem = FileSystem.get(hdConf)
 
   val partitionNums: Int = Option(sqlContext.getConf("spark.sql.shuffle.partitions")).getOrElse("200").toInt
-  val warehouseDir = "/hyzs/warehouse/hyzs.db/"
+  val warehouseDir = "/user/hive/warehouse/hyzs.db/"
   val mapper = new ObjectMapper()
   mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
   // NOTE: not serializable
   //  ObjectMapper.registerModule(DefaultScalaModule)
   val broadMapper: Broadcast[ObjectMapper] = sc.broadcast(mapper)
+
+  def processNull(df: DataFrame): DataFrame = {
+    df.na.fill(0.0)
+      .na.fill("0.0")
+      .na.replace("*", Map("" -> "0.0",
+      "null" -> "0.0", "NULL" -> "0.0",
+      "-9999"->"0"))
+      .na.replace("*", Map(-9999 -> 0))
+  }
+
 
   def checkHDFileExist(filePath: String): Boolean = {
     val path = new Path(filePath)

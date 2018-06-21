@@ -31,13 +31,10 @@ object JDDataProcess {
   }
 
   // ensure countCols can be counted(cast double)
-  def labelGenerateProcess(taskName:String, countCols: Array[String], weight: Array[Double]): DataFrame = {
+  def labelGenerateProcess(allData:DataFrame, countCols: Array[String], weight: Array[Double]): DataFrame = {
     if( countCols.length == weight.length){
-      val allData = sqlContext.sql("select * from hyzs.all_data")
       val selectCols = countCols.map( col => s"cast ($col as double) $col")
-      val label_data = processEmpty(allData, countCols)
-        .selectExpr(key +: selectCols : _*)
-
+      val label_data = processNull(allData.selectExpr(key +: selectCols : _*))
       // vector assembling
       val assembler = new VectorAssembler()
         .setInputCols(countCols)
@@ -69,19 +66,10 @@ object JDDataProcess {
     dataFrame.selectExpr(newCols: _*)
   }
 
-  // process empty value for label generation
-  def processEmpty(df: DataFrame, cols: Seq[String]): DataFrame = {
-    df.na.fill("0.0")
-      .na.replace(cols, Map("" -> "0.0","null" -> "0.0", "NULL" -> "0.0"))
-   //   .dropDuplicates(Seq(key))
-  }
-
-  def processNull(df: DataFrame): DataFrame = {
-    df.na.fill("0")
-      .na.replace("*", Map("null" -> "0", "NULL" -> "0", "-9999" -> "0"))
-  }
-
   // generate label table and split data
+  // no jdmall_ordr_f0116
+  // no jdmall_user_f0007  jdmall_user_f0009 jdmall_user_f0014 mem_vip_f0008
+  // no mem_vip_f0011
   def trainModelData(allData: DataFrame): Unit = {
     val labelProcessMap = Map(
       "m1" ->
@@ -93,10 +81,10 @@ object JDDataProcess {
         (Array("mem_vip_f0011", "mem_vip_f0001"), Array(0.5, 0.5))
     )
     for( (task, params) <- labelProcessMap) {
-      val labelTable = labelGenerateProcess(task, params._1, params._2)
+      val labelTable = labelGenerateProcess(allData, params._1, params._2)
       saveTable(labelTable, s"${task}_label")
       val dataTable = dataGenerateProcess(allData, params._1 :+ originalKey)
-      val splitData = dataTable.randomSplit(Array(0.7, 0.2, 0.1))
+      val splitData = dataTable.randomSplit(Array(0.4, 0.4, 0.2))
       val train = splitData(0)
       val valid = splitData(1)
       val test = splitData(2)
