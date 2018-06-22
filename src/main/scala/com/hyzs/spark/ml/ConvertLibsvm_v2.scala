@@ -4,17 +4,12 @@ package com.hyzs.spark.ml
   * Created by xiangkun on 2018/6/21.
   */
 import java.math.BigDecimal
-
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.hyzs.spark.utils.SparkUtils._
 import com.hyzs.spark.bean._
 import com.hyzs.spark.utils.{InferSchema, Params}
-import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.feature.{StringIndexer, StringIndexerModel, VectorAssembler}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.ml.feature.{StringIndexer, StringIndexerModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -68,7 +63,7 @@ object ConvertLibsvm_v2 {
       }
       colName
     }
-    df.select(newColNames :_*)
+    df.select(col("label") +: newColNames :_*)
   }
 
   def convertDataFrameSchema(df:DataFrame, schema:StructType): DataFrame = {
@@ -203,16 +198,10 @@ object ConvertLibsvm_v2 {
         objectArray = readObj(s"$resultPath/$tableName.obj")
 
       } else if(args.length >0 && args(0) == "train"){
-        val allCols = result.columns
-        val idAndLabelCols = result.columns.take(2)
-        val dataCols = result.columns.drop(2)
+
         val dataSchema: Seq[StructField] = result.schema.drop(2)
         val stringSchema = dataSchema.filter(field => field.dataType == StringType)
-        val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
         val stringCols = stringSchema.map(field => field.name)
-        val timeCols = timeSchema.map(field => field.name)
-        val numberCols = dataCols diff stringCols diff timeCols
-
         val indexerArray = stringCols.map(field => getIndexers(result, field))
         objectArray = buildObjectArray(dataSchema, indexerArray)
         val objRdd:RDD[String] = buildObjectJsonRdd(objectArray)
@@ -234,7 +223,7 @@ object ConvertLibsvm_v2 {
       println("start save libsvm file")
       val libsvm: RDD[String] = result.rdd.map(row => {
         val datum = row.toSeq
-        castLibsvmString(datum(1).toString, datum.drop(2))
+        castLibsvmString(datum.head.toString, datum.drop(2))
       })
 
       saveRdd(libsvm, libsvmPath)

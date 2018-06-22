@@ -22,7 +22,7 @@ object SparkUtils {
   val conf: SparkConf = new SparkConf().setAppName("JDProcess")
   val sc = SparkContext.getOrCreate(conf)
   //val sqlContext = new HiveContext(sc)
-  val sqlContext = SQLContext.getOrCreate(sc).asInstanceOf[HiveContext]
+  val sqlContext = SQLContext.getOrCreate(sc)
   val hdConf: Configuration = sc.hadoopConfiguration
   val fs: FileSystem = FileSystem.get(hdConf)
 
