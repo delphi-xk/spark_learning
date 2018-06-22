@@ -204,8 +204,8 @@ object ConvertLibsvm {
 
   def buildObjRdd(dataSchema:StructType,
                   indexerArray:Seq[(String,StringIndexerModel)]): RDD[String] = {
-    val objList:ListBuffer[BaseObj] = new ListBuffer
-    objList += Ob1(0, Params.NO_TYPE, key)
+    val objList:ListBuffer[ModelObject] = new ListBuffer
+    objList += ModelObject(0, Params.NO_TYPE, key, Map())
     val indexerMap: Map[String,Map[String,Int]] = indexerArray.map{ case (name,model) =>
       if(model.labels.length<maxLabelLength)
         (name, model.labels.zip(1 to model.labels.length).toMap)
@@ -216,13 +216,13 @@ object ConvertLibsvm {
     }.toMap
     (1 to dataSchema.length).zip(dataSchema).foreach{ case (index, field) =>
       val obj = field.dataType match {
-        case IntegerType => Ob1(index, Params.NUMERIC_TYPE, field.name)
-        case DoubleType => Ob1(index, Params.NUMERIC_TYPE, field.name)
-        case DateType => Ob1(index, Params.DATE_TYPE, field.name)
-        case TimestampType => Ob1(index, Params.DATE_TYPE, field.name)
-        case StringType => Ob2(index, Params.STRING_TYPE, field.name,
+        case IntegerType => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
+        case DoubleType => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
+        case DateType => ModelObject(index, Params.DATE_TYPE, field.name, Map())
+        case TimestampType => ModelObject(index, Params.DATE_TYPE, field.name, Map())
+        case StringType => ModelObject(index, Params.STRING_TYPE, field.name,
           indexerMap.getOrElse(field.name, Map("null"->0)))
-        case _ => Ob1(index, Params.NUMERIC_TYPE, field.name)
+        case _ => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
       }
       objList += obj
     }
@@ -245,24 +245,15 @@ object ConvertLibsvm {
 
   }
 
-  def readObj(filePath:String): Array[Ob1] = {
+  def readObj(filePath:String): Array[ModelObject] = {
     val objRdd = sc.textFile(filePath)
     val objList = objRdd.mapPartitions({ records =>
       val mapper = new ObjectMapper
       mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
       mapper.registerModule(DefaultScalaModule)
-      records.map(record => mapper.readValue(record, classOf[Ob1]))
+      records.map(record => mapper.readValue(record, classOf[ModelObject]))
     }).collect()
     objList
-  }
-
-  def getStructToJson(dataSchema:StructType): RDD[String] = {
-    val structArray = (1 to dataSchema.length).zip(dataSchema).map{ case (index,field) =>
-      val info = StructInfo(index, field.name, field.dataType.typeName)
-      broadMapper.value.registerModule(DefaultScalaModule)
-      broadMapper.value.writeValueAsString(info)
-    }
-    sc.makeRDD(structArray)
   }
 
 
@@ -301,9 +292,9 @@ object ConvertLibsvm {
       result = Some(pipeline.fit(data).transform(data))
 
       val objList = readObj(s"$resultPath/$tableName.obj")
-      stringCols = objList.filter(obj => obj.value == Params.STRING_TYPE).map(_.fieldName)
-      timeCols = objList.filter(obj => obj.value == Params.DATE_TYPE).map(_.fieldName)
-      numberCols = objList.filter(obj => obj.value == Params.NUMERIC_TYPE).map(_.fieldName)
+      stringCols = objList.filter(obj => obj.fieldType == Params.STRING_TYPE).map(_.fieldName)
+      timeCols = objList.filter(obj => obj.fieldType == Params.DATE_TYPE).map(_.fieldName)
+      numberCols = objList.filter(obj => obj.fieldType == Params.NUMERIC_TYPE).map(_.fieldName)
 
     } else if(args.length >0 && args(0) == "train"){
       val dataSchema = InferSchema.inferSchema(data)

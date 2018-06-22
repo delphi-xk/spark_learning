@@ -7,9 +7,9 @@ import java.math.BigDecimal
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.hyzs.spark.bean._
 import com.hyzs.spark.utils.SparkUtils._
-import com.hyzs.spark.utils.{BaseUtil, Params}
+import com.hyzs.spark.bean._
+import com.hyzs.spark.utils.{InferSchema, Params}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.{StringIndexer, StringIndexerModel, VectorAssembler}
 import org.apache.spark.mllib.linalg.Vector
@@ -17,9 +17,8 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.{col, _}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import com.hyzs.spark.sql.JDDataProcess
 
@@ -55,15 +54,6 @@ object ConvertLibsvm_v2 {
 
   def replaceOldCols(df:DataFrame, objArray:Array[ModelObject]): DataFrame = {
 
-    // spark.udf.register("stamp", castTimestampFuc _)
-    //val timeUdf = udf(castTimestampFuc _)
-
-    /*    val strings = labelArray.map{ datum =>
-          val func: String => Int = strToLabel(datum._2)
-          val labelUdf = udf(func)
-          labelUdf(col(datum._1)).as(datum._1)
-        }*/
-
     val newColNames:Array[Column] = objArray.map{ obj =>
       val colName:Column = obj.fieldType match {
         case Params.NO_TYPE => col(obj.fieldName)
@@ -80,6 +70,21 @@ object ConvertLibsvm_v2 {
     }
     df.select(newColNames :_*)
   }
+
+  def convertDataFrameSchema(df:DataFrame, schema:StructType): DataFrame = {
+    val schemaSeq:Seq[StructField] = schema
+    val convertColumns:Seq[Column] = schemaSeq.map{ field =>
+      val convertColumn = field.dataType match {
+        case IntegerType => col(field.name).cast("double").as(field.name)
+        case DoubleType => col(field.name).cast("double").as(field.name)
+        case TimestampType => col(field.name).cast("timestamp").as(field.name)
+        case _ => col(field.name).as(field.name)
+      }
+      convertColumn
+    }
+    df.select(convertColumns: _*)
+  }
+
 
   def saveRdd(rdd:RDD[String], savePath:String): Unit = {
     if(checkHDFileExist(savePath))
@@ -150,8 +155,18 @@ object ConvertLibsvm_v2 {
   }
 
   def prepareDataTable(): Unit ={
-    val data = sqlContext.table("sample_all")
-    JDDataProcess.trainModelData(processNull(data))
+    val key = "phone"
+    val allDataStr = sqlContext.table("tmp_all")
+    val schema = InferSchema.inferSchema(allDataStr)
+    val allData = convertDataFrameSchema(allDataStr, schema)
+
+    saveTable(allData, "all_data")
+
+    val labelMap = Map(
+      "m1" -> ((Array("jdmall_jdmuser_p0002816", "jdmall_user_p0001"), Array(0.5, 0.5)))
+    )
+    JDDataProcess.trainModelData(key, allData, labelMap)
+
   }
 
 
@@ -172,9 +187,7 @@ object ConvertLibsvm_v2 {
       val resultPath = s"${taskPath}result"
 
       val sourceData = sqlContext.table(tableName)
-      val allLabel = sqlContext.table(labelName).randomSplit(Array(0.8,0.2))
-      val label = allLabel(0)
-      val labelForTest = allLabel(1)
+      val label = sqlContext.table(labelName)
 
       // join process based on id in data table
       val fullData = label.join(sourceData, Seq(key), "left")

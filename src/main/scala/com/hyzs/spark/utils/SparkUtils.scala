@@ -7,7 +7,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FileUtil, Path}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -20,8 +20,9 @@ import org.apache.spark.util.SizeEstimator
   */
 object SparkUtils {
   val conf: SparkConf = new SparkConf().setAppName("JDProcess")
-  val sc = new SparkContext(conf)
-  val sqlContext = new HiveContext(sc)
+  val sc = SparkContext.getOrCreate(conf)
+  //val sqlContext = new HiveContext(sc)
+  val sqlContext = SQLContext.getOrCreate(sc).asInstanceOf[HiveContext]
   val hdConf: Configuration = sc.hadoopConfiguration
   val fs: FileSystem = FileSystem.get(hdConf)
 
