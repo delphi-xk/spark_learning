@@ -149,10 +149,3 @@ done
 consume | m1
 value | m2
 risk | m3
-class1 | c1
-class2 | c2
-class3 | c3
-class4 | c4
-class5 | c5
-class6 | c6
-class7 | c7

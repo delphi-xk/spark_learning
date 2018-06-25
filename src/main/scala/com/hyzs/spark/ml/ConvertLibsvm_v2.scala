@@ -6,7 +6,6 @@ package com.hyzs.spark.ml
 import java.math.BigDecimal
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.hyzs.spark.utils.SparkUtils._
 import com.hyzs.spark.bean._
 import com.hyzs.spark.utils.{InferSchema, Params}
 import org.apache.spark.ml.feature.{StringIndexer, StringIndexerModel}
@@ -17,6 +16,7 @@ import org.apache.spark.sql.types._
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import com.hyzs.spark.sql.JDDataProcess
 
+import com.hyzs.spark.utils.SparkUtils._
 
 /**
   * Created by XIANGKUN on 2018/4/24.
@@ -149,27 +149,33 @@ object ConvertLibsvm_v2 {
     resString.toString()
   }
 
-  def prepareDataTable(): Unit ={
+  def buildTmpAllData(): Unit ={
     val key = "phone"
     val allDataStr = sqlContext.table("tmp_all")
     val schema = InferSchema.inferSchema(allDataStr)
     val allData = convertDataFrameSchema(allDataStr, schema)
-
     saveTable(allData, "all_data")
+  }
 
+  def prepareDataTable(): Unit ={
+    val key = "phone"
+    val allData = sqlContext.table("hyzs.all_data")
     val labelMap = Map(
-      "m1" -> ((Array("jdmall_jdmuser_p0002816", "jdmall_user_p0001"), Array(0.5, 0.5)))
+      "m1" -> ((Array("jdmall_up_m0001", "jdmall_up_m0002", "jdmall_up_m0009",
+        "jdmall_jdmordr_f0003656", "jdmall_jdmordr_f0003687"), Array(0.3, 0.3, 0.2, 0.1, 0.1))),
+      "m2" -> (Array("jdmall_user_p0001", "fin_fin_f0001475", "pay_pay_m0002698"),
+        Array(0.4, 0.5, 0.1))
     )
     JDDataProcess.trainModelData(key, allData, labelMap)
 
   }
 
 
-  def convertLibsvm(args:Array[String]): Unit ={
+  def convertLibsvm(taskArray: Array[String], taskType:String): Unit ={
     //TODO: switch libsvm with or without label table
     //val args = Array("train")
-    val tables = Seq("m1_test")
-    val labels = Seq("m1_label")
+    val tables = taskArray.map( name => s"${name}_data")
+    val labels = taskArray.map( name => s"${name}_label")
 
     val convertPath = "/hyzs/model/"
     for((tableName, labelName) <- tables.zip(labels)){
@@ -181,8 +187,8 @@ object ConvertLibsvm_v2 {
       val namePath = s"${taskPath}name"
       val resultPath = s"${taskPath}result"
 
-      val sourceData = sqlContext.table(tableName)
-      val label = sqlContext.table(labelName)
+      val sourceData = sqlContext.table("hyzs."+tableName)
+      val label = sqlContext.table("hyzs."+labelName)
 
       // join process based on id in data table
       val fullData = label.join(sourceData, Seq(key), "left")
@@ -193,12 +199,19 @@ object ConvertLibsvm_v2 {
       val nameRdd = sc.makeRDD[String](sourceData.columns)
       var objectArray:Array[ModelObject] = null
 
-      if(args.length >0 && args(0) == "predict"){
-
+      if(taskType == "predict"){
         objectArray = readObj(s"$resultPath/$tableName.obj")
+        result = replaceOldCols(result, objectArray)
+        saveTable(result, tableName+"_libsvm")
+        println("start save libsvm file")
+        val libsvm = result.rdd.map(row => {
+          val datum = row.toSeq
+          castLibsvmString(datum = datum.drop(2))
+        })
+        saveRdd(libsvm, libsvmPath)
+      }
 
-      } else if(args.length >0 && args(0) == "train"){
-
+      else if(taskType == "train"){
         val dataSchema: Seq[StructField] = result.schema.drop(2)
         val stringSchema = dataSchema.filter(field => field.dataType == StringType)
         val stringCols = stringSchema.map(field => field.name)
@@ -216,17 +229,17 @@ object ConvertLibsvm_v2 {
         copyMergeHDFiles(s"$objPath/", s"$resultPath/$tableName.obj")
         copyMergeHDFiles(s"$namePath/", s"$resultPath/$tableName.name")
         println("save obj name finished.")
+
+        result = replaceOldCols(result, objectArray)
+        saveTable(result, tableName+"_libsvm")
+        println("start save libsvm file")
+        val libsvm = result.rdd.map(row => {
+          val datum = row.toSeq
+          castLibsvmString(datum.head.toString, datum.drop(2))
+        })
+        saveRdd(libsvm, libsvmPath)
       }
 
-      result = replaceOldCols(result, objectArray)
-
-      println("start save libsvm file")
-      val libsvm: RDD[String] = result.rdd.map(row => {
-        val datum = row.toSeq
-        castLibsvmString(datum.head.toString, datum.drop(2))
-      })
-
-      saveRdd(libsvm, libsvmPath)
       saveRdd(indexRdd, indexPath)
       println("save libsvm file finished.")
       mkHDdir(resultPath)
@@ -238,7 +251,8 @@ object ConvertLibsvm_v2 {
 
   def main(args: Array[String]): Unit = {
     //prepareDataTable
-    convertLibsvm(args)
+    val taskArray = Array("m1", "m2")
+    convertLibsvm(taskArray, args(0))
 
   }
 }

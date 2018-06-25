@@ -81,18 +81,19 @@ object JDDataProcess {
   // no jdmall_user_f0007  jdmall_user_f0009 jdmall_user_f0014 mem_vip_f0008
   // no mem_vip_f0011
   /**
-    * generate task_label, task_train, task_valid, task_test tables
+    * generate task_label, task_data tables
     * @param key
     * @param allData
     * @param labelProcessMap
     */
   def trainModelData(key:String, allData: DataFrame,
-                     labelProcessMap:Map[String, (Array[String], Array[Double])] = preLabelMap): Unit = {
+                     labelProcessMap:Map[String, (Array[String], Array[Double])]): Unit = {
 
     for( (task, params) <- labelProcessMap) {
       val labelTable = labelGenerateProcess(key, allData, params._1, params._2)
       saveTable(labelTable, s"${task}_label")
       val dataTable = dataGenerateProcess(allData, params._1)
+      /*
       val splitData = dataTable.randomSplit(Array(0.3, 0.3, 0.4))
       val train = splitData(0)
       val valid = splitData(1)
@@ -100,12 +101,15 @@ object JDDataProcess {
       saveTable(train, s"${task}_train")
       saveTable(valid, s"${task}_valid")
       saveTable(test, s"${task}_test")
+      */
+      saveTable(dataTable, s"${task}_data")
+
     }
   }
 
   // no label table
   def predictModelData(allData: DataFrame,
-                       labelProcessMap:Map[String, (Array[String], Array[Double])] = preLabelMap): Unit = {
+                       labelProcessMap:Map[String, (Array[String], Array[Double])]): Unit = {
     for((task, params) <- labelProcessMap){
       val dataTable = dataGenerateProcess(allData, params._1)
       saveTable(dataTable, s"${task}_test")
@@ -189,9 +193,9 @@ object JDDataProcess {
     saveTable(result, "all_data")
     // if only for prediction, not need to split data or generate label table
     if (args.length>1 && args(1) == "predict"){
-      predictModelData(result)
+      predictModelData(result, preLabelMap)
     } else {
-      trainModelData(key, result)
+      trainModelData(key, result, preLabelMap)
     }
 
   }
