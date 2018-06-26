@@ -40,6 +40,19 @@ object JDDataProcess {
         "cast (avg_pay_amount as string) avg_pay_amount")
   }
 
+
+  // check timeValues should be valid column name syntax
+  def processSummary(df:DataFrame, key:String, timeField:String,
+                     timeValues:Array[String], selectFields:Array[String]): DataFrame = {
+    var ids = df.select(key).distinct()
+    for(timeVal <- timeValues){
+      val suf_cols = selectFields.map( field => col(field).as(s"${field}_$timeVal") )
+      val suf_x = df.filter(col(timeField) === lit(timeVal)).select( col(key) +: suf_cols : _*)
+      ids = ids.join(suf_x, Seq(key), "left")
+    }
+    ids
+  }
+
   // ensure countCols can be counted(cast double)
   def labelGenerateProcess(key:String, allData:DataFrame, countCols: Array[String], weight: Array[Double]): DataFrame = {
     if( countCols.length == weight.length){
@@ -72,8 +85,8 @@ object JDDataProcess {
 
   // ensure dataFrame.columns contains filterCols
   def dataGenerateProcess(dataFrame: DataFrame, filterCols:Array[String]): DataFrame = {
-    val newCols = dataFrame.columns diff filterCols
-    dataFrame.selectExpr(newCols: _*)
+    val newCols = (dataFrame.columns diff filterCols).map( name => col(name))
+    dataFrame.select(newCols: _*)
   }
 
   // generate label table and split data

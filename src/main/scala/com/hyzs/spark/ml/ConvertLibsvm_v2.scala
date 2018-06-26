@@ -14,8 +14,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
-import com.hyzs.spark.sql.JDDataProcess
-
+import com.hyzs.spark.utils.SparkUtils
+import com.hyzs.spark.sql.JDDataProcess._
 import com.hyzs.spark.utils.SparkUtils._
 
 /**
@@ -36,12 +36,6 @@ object ConvertLibsvm_v2 {
       .fit(df)
     (col,indexer)
   }
-
-  /*  def strToIndex(labels:Array[String]):UserDefinedFunction = udf((str:String) => {
-      labels.zipWithIndex
-        .toMap
-        .getOrElse(str, 0)
-    })*/
 
   def strToLabel(stringMap:Map[String,Int])(str:String): Int = {
     stringMap.getOrElse(str, 0)
@@ -157,16 +151,36 @@ object ConvertLibsvm_v2 {
     saveTable(allData, "all_data")
   }
 
+  def buildSumData(): Unit = {
+    val key = "phone"
+    val timeField = "month"
+    val tables = Array("jrlab_dev_py3_catern_sum", "jrlab_dev_py3_ord_sum", "jrlab_dev_py3_det_sum")
+    for (tableName <- tables) {
+      val timeVals = Array(
+        //"2017-04", "2017-05", "2017-06", "2017-07",
+        //"2017-08", "2017-09", "2017-10", "2017-11",
+        "2017-12", "2018-01", "2018-02", "2018-03")
+      val catern_sum = sqlContext.table(s"default.$tableName")
+      val filterCols = Array("phone", "mon", "month")
+      val selCols = catern_sum.columns diff filterCols
+      val catern_new = processSummary(catern_sum, key, timeField, timeVals, selCols)
+      SparkUtils.saveTable(catern_new, tableName + "_new")
+
+    }
+
+  }
+
   def prepareDataTable(): Unit ={
     val key = "phone"
     val allData = sqlContext.table("hyzs.all_data")
     val labelMap = Map(
-      "m1" -> ((Array("jdmall_up_m0001", "jdmall_up_m0002", "jdmall_up_m0009",
-        "jdmall_jdmordr_f0003656", "jdmall_jdmordr_f0003687"), Array(0.3, 0.3, 0.2, 0.1, 0.1))),
+      "m1" -> (Array("jdmall_up_m0001", "jdmall_up_m0002", "jdmall_up_m0009",
+        "jdmall_jdmordr_f0003656", "jdmall_jdmordr_f0003687"),
+        Array(0.2, 0.2, 0.4, 0.1, 0.1)),
       "m2" -> (Array("jdmall_user_p0001", "fin_fin_f0001475", "pay_pay_m0002698"),
-        Array(0.4, 0.5, 0.1))
+        Array(0.3, 0.3, 0.4))
     )
-    JDDataProcess.trainModelData(key, allData, labelMap)
+    trainModelData(key, allData, labelMap)
 
   }
 
