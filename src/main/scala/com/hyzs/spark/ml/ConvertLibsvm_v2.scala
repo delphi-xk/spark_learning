@@ -143,31 +143,61 @@ object ConvertLibsvm_v2 {
     resString.toString()
   }
 
-  def buildTmpAllData(): Unit ={
-    val key = "phone"
-    val allDataStr = sqlContext.table("tmp_all")
-    val schema = InferSchema.inferSchema(allDataStr)
-    val allData = convertDataFrameSchema(allDataStr, schema)
-    saveTable(allData, "all_data")
+  // load file to db "default", build sum_new to db "hyzs"
+  def loadFileToDatabase(): Unit ={
+    val dataPath = sc.getConf.get("spark.processJob.dataPath")
+    val sumStr = sc.getConf.get("spark.processJob.sumTables")
+    val feaStr = sc.getConf.get("spark.processJob.feaTables")
+    val idStr = sc.getConf.get("spark.processJob.idTable")
+    val sumTables = sumStr.split(",")
+    val feaTables = feaStr.split(",")
+    val allTables = idStr +: (sumTables ++ feaTables)
+
+    for(table <- allTables){
+      val tablePath = s"$dataPath$table.txt"
+      assert(SparkUtils.checkHDFileExist(tablePath), s"$tablePath not exist!")
+      val df = SparkUtils.createDFfromCsv(tablePath)
+      SparkUtils.saveTable(df, table, "default")
+    }
+
+    buildSumData(sumTables)
+    buildTmpAllData(idStr, sumTables, feaTables)
   }
 
-  def buildSumData(): Unit = {
+  def buildTmpAllData(idTable:String, sumTables:Array[String], feaTables:Array[String]): Unit ={
+    val key = "phone"
+
+    var ids = sqlContext.table(idTable).select(key).distinct
+    for(sumTable <- sumTables){
+      val table = sqlContext.table(s"hyzs.${sumTable}_new")
+      ids= ids.join(table, Seq(key), "left")
+    }
+    for(feaTable <- feaTables){
+      val table = sqlContext.table(s"default.$feaTable").drop("mon")
+      ids = ids.join(table, Seq(key), "left")
+    }
+    ids.persist()
+
+    val schema = InferSchema.inferSchema(ids)
+    val allData = ConvertLibsvm_v2.convertDataFrameSchema(ids, schema)
+    SparkUtils.saveTable(allData.dropDuplicates(Seq(key)), "all_data")
+  }
+
+  def buildSumData(sumTables:Array[String]): Unit = {
     val key = "phone"
     val timeField = "month"
-    val tables = Array("jrlab_dev_py3_catern_sum", "jrlab_dev_py3_ord_sum", "jrlab_dev_py3_det_sum")
-    for (tableName <- tables) {
+    for (tableName <- sumTables) {
       val timeVals = Array(
         //"2017-04", "2017-05", "2017-06", "2017-07",
         //"2017-08", "2017-09", "2017-10", "2017-11",
         "2017-12", "2018-01", "2018-02", "2018-03")
-      val catern_sum = sqlContext.table(s"default.$tableName")
+      val sumTable = sqlContext.table(s"default.$tableName")
       val filterCols = Array("phone", "mon", "month")
-      val selCols = catern_sum.columns diff filterCols
-      val catern_new = processSummary(catern_sum, key, timeField, timeVals, selCols)
-      SparkUtils.saveTable(catern_new, tableName + "_new")
+      val selCols = sumTable.columns diff filterCols
+      val sumNew = processSummary(sumTable, key, timeField, timeVals, selCols)
+      SparkUtils.saveTable(sumNew, tableName + "_new")
 
     }
-
   }
 
   def prepareDataTable(): Unit ={
@@ -264,6 +294,9 @@ object ConvertLibsvm_v2 {
   }
 
   def main(args: Array[String]): Unit = {
+    // val sumTables = Array("jrlab_dev_hyzs2_catern_sum", "jrlab_dev_hyzs2_ord_sum", "jrlab_dev_hyzs2_det_sum")
+    // val feaTables = Array("jrlab_dev_hyzs2_cate_sum", "jrlab_dev_hyzs2_sample_n",  "jrlab_dev_hyzs2_sample_w")
+    // val idTable = "jrlab_dev_hyzs2_phonelist"
     //prepareDataTable
     val taskArray = Array("m1", "m2")
     convertLibsvm(taskArray, args(0))

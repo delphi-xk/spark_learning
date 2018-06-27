@@ -27,7 +27,7 @@ object SparkUtils {
   val fs: FileSystem = FileSystem.get(hdConf)
 
   val partitionNums: Int = Option(sqlContext.getConf("spark.sql.shuffle.partitions")).getOrElse("200").toInt
-  val warehouseDir = "/user/hive/warehouse/hyzs.db/"
+  val warehouseDir = "/user/hive/warehouse/"
   val mapper = new ObjectMapper()
   mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
   // NOTE: not serializable
@@ -78,7 +78,10 @@ object SparkUtils {
 
   def saveTable(df: DataFrame, tableName:String, dbName:String="hyzs"): Unit = {
     sqlContext.sql(s"drop table if exists $dbName.$tableName")
-    val path = s"$warehouseDir$tableName"
+    var path = ""
+    if(dbName == "default") path = s"$warehouseDir$tableName"
+    else path = s"$warehouseDir$dbName.db/$tableName"
+
     if(checkHDFileExist(path))dropHDFiles(path)
     df.write
       .option("path",path)
