@@ -1,6 +1,8 @@
 package com.hyzs.spark.utils
 
 
+import java.util.concurrent.atomic.AtomicReference
+
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
@@ -9,7 +11,6 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.SizeEstimator
 
@@ -21,8 +22,7 @@ import org.apache.spark.util.SizeEstimator
 object SparkUtils {
   val conf: SparkConf = new SparkConf().setAppName("JDProcess")
   val sc = SparkContext.getOrCreate(conf)
-  //val sqlContext = new HiveContext(sc)
-  val sqlContext = SQLContext.getOrCreate(sc)
+  val sqlContext = HiveContextUtil.getOrCreate(sc)
   val hdConf: Configuration = sc.hadoopConfiguration
   val fs: FileSystem = FileSystem.get(hdConf)
 

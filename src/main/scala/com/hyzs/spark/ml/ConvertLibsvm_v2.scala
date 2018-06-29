@@ -208,7 +208,7 @@ object ConvertLibsvm_v2 {
         "jdmall_jdmordr_f0003656", "jdmall_jdmordr_f0003687"),
         Array(0.2, 0.2, 0.4, 0.1, 0.1)),
       "m2" -> (Array("jdmall_user_p0001", "fin_fin_f0001475", "pay_pay_m0002698"),
-        Array(0.3, 0.3, 0.4))
+        Array(0.4, 0.4, 0.2))
     )
     trainModelData(key, allData, labelMap)
 
@@ -297,7 +297,8 @@ object ConvertLibsvm_v2 {
     // val sumTables = Array("jrlab_dev_hyzs2_catern_sum", "jrlab_dev_hyzs2_ord_sum", "jrlab_dev_hyzs2_det_sum")
     // val feaTables = Array("jrlab_dev_hyzs2_cate_sum", "jrlab_dev_hyzs2_sample_n",  "jrlab_dev_hyzs2_sample_w")
     // val idTable = "jrlab_dev_hyzs2_phonelist"
-    //prepareDataTable
+    loadFileToDatabase()
+    prepareDataTable()
     val taskArray = Array("m1", "m2")
     convertLibsvm(taskArray, args(0))
 
