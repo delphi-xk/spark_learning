@@ -35,7 +35,7 @@
 - RDD在缓存后，将存储于堆内或堆外的Storage部分，Partition转变为Block，将占 用一段连续空间，该过程称为Unroll（展开）。
 
 #### 共享变量（ broadcast and accumulator ）
-- broadcast，每个机器上存储一份广播变量（只读）
+- broadcast，每个机器（worker节点）上存储一份广播变量（只读）
 - accumulator，在每个executor端可修改（add），但不可读，只限driver端可读
 
 
