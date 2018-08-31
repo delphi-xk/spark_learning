@@ -7,6 +7,7 @@
 - reduce, collect, count, take, saveAsTextFile, foreach
 - reduce会将结果聚集在driver端，reduceByKey在各个executor分别执行
 - reduceByKey效率优于groupByKey，reduceByKey输出端只有一个值，groupByKey汇聚了每个key的全部值，造成更多的网络和内存占用
+- treeReduce, treeAggregate采用树形层级方式聚合，效率更高，在driver端的shuffle量更少。
 
 #### narrow dependency and wide dependency(窄依赖和宽依赖)
 - \*bykey都是宽依赖
