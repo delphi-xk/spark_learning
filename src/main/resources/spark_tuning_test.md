@@ -2,6 +2,15 @@
 
 ### 1. Spark基本概念
 
+#### Transformation and Action
+- map, flatmap, filter, union, intersection, join, repartition, coalesce, reduceByKey, groupByKey, aggregateByKey
+- reduce, collect, count, take, saveAsTextFile, foreach
+- reduce会将结果聚集在driver端，reduceByKey在各个executor分别执行
+- reduceByKey效率优于groupByKey，reduceByKey输出端只有一个值，groupByKey汇聚了每个key的全部值，造成更多的网络和内存占用
+
+#### narrow dependency and wide dependency(窄依赖和宽依赖)
+- \*bykey都是宽依赖
+
 #### Job, Stage, Task
 - Spark程序内的每个Action操作会产生一个新Job的提交
 - Transformation会生成新的RDD，如果是宽依赖（shuffle依赖，如join，groupby等），则会划分出新的Stage；如果是窄依赖（如map，filter等）则不会
@@ -17,14 +26,17 @@
 > https://stackoverflow.com/questions/24696777/what-is-the-relationship-between-workers-worker-instances-and-executors
 
 #### 内存结构
-
 - Reserved Memory.在源码中定义的，系统预留的300M内存，不建议修改。保存spark内元数据结构。
 - User Memory.存储用户定义的数据结构或Spark元数据结构，默认大小：（Java堆内存-预留内存）\*25%。
 - Spark Memory.Uniformed Memory，动态分配Storage和Execution的比例，默认大小：（Java堆内存-预留内存）\*75%。
 - Storage主要用于缓存数据，Execution主要用于Shuffle过程。
 - RDD在缓存到Storage之前，占用堆内存user memory部分, 每个Partition内数据（record）通过迭代器（Iterator）访问，同一Partition内record存储位置不一定连续。
 - RDD在缓存后，将存储于堆内或堆外的Storage部分，Partition转变为Block，将占 用一段连续空间，该过程称为Unroll（展开）。
-- 
+
+#### 共享变量（ broadcast and accumulator ）
+- broadcast，每个机器上存储一份广播变量（只读）
+- accumulator，在每个executor端可修改（add），但不可读，只限driver端可读
+
 
 ### 2. Shuffle过程
 
@@ -58,6 +70,8 @@
 #### Shuffle Hash Join
 
 #### Broadcast Hash Join
+- 大表join小表时，把小表作为广播变量广播到所有executor，这样可以避免大表的shuffle
+
 
 #### Sort Merge Join
 
