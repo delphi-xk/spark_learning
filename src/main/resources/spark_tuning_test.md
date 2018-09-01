@@ -6,11 +6,14 @@
 - map, flatmap, filter, union, intersection, join, repartition, coalesce, reduceByKey, groupByKey, aggregateByKey
 - reduce, collect, count, take, saveAsTextFile, foreach
 - reduce会将结果聚集在driver端，reduceByKey在各个executor分别执行
-- reduceByKey效率优于groupByKey，reduceByKey输出端只有一个值，groupByKey汇聚了每个key的全部值，造成更多的网络和内存占用
+- reduceByKey效率优于groupByKey，reduceByKey输s出端只有一个值，groupByKey汇聚了每个key的全部值，造成更多的网络和内存占用
 - treeReduce, treeAggregate采用树形层级方式聚合，效率更高，在driver端的shuffle量更少。
+- 主线程在driver端执行，transformation在executor执行
+- collect等动作会将executor数据收集到driver
+- driver端才能进行rdd操作的调用。即map过程中，不能进行其他rdd的引用操作，需要合并为整体后，再考虑后续的转换。
 
 #### narrow dependency and wide dependency(窄依赖和宽依赖)
-- \*bykey都是宽依赖
+- byKey的变换都是宽依赖，涉及到shuffle数据的过程
 
 #### Job, Stage, Task
 - Spark程序内的每个Action操作会产生一个新Job的提交
@@ -69,6 +72,8 @@
 ### 3. SparkSQL join类型
 
 #### Shuffle Hash Join
+- 中表join大表时，可filter过滤大表部分数据，然后进行join操作，可有效降低shuffle量
+- left join不会减少大表shuffle数据量
 
 #### Broadcast Hash Join
 - 大表join小表时，把小表作为广播变量广播到所有executor，这样可以避免大表的shuffle
