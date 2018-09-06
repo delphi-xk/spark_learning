@@ -56,13 +56,14 @@ object ModelEvaluation extends App{
       .reverse
     val simplePoints = simplifyPointByScale(rocPointArray, 3)
     // print points
-/*    for( point <- simplePoints){
+    for( point <- simplePoints){
       println(point)
-    }*/
+    }
 
     println(s"area under curve: ${areaUnderCurve(simplePoints)}")
     //outputPointArray("d:/roc-simple-points.csv", simplePoints)
   }
+
 
   // calculate cumulative ratio for ks test
   def countCumulativeRatio(threshold:Double, data:Array[(Double, Double)]): (Double, Double) = {

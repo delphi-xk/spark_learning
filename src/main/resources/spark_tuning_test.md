@@ -20,6 +20,8 @@
 - Transformation会生成新的RDD，如果是宽依赖（shuffle依赖，如join，groupby等），则会划分出新的Stage；如果是窄依赖（如map，filter等）则不会
 - Task是Spark程序执行时的最小单元，具体的partition数目会决定任务的task数目。
 如`sc.textFile(path, n)`，读取文件时就会有n个task；如shuffle后的save操作，会根据`spark.sql.shuffle.partitions`来决定task的数目（默认值200）
+- 有依赖关系的Stage会有固定先后顺序提交Task
+- 不同Stage的Task的并发由TaskScheduler设置的策略决定，FIFO（默认）或FAIR
 
 #### Master, Worker, Driver, Executor
 - Master,Worker是集群启动时配置的负责分配资源和具体执行任务的节点。
@@ -43,6 +45,8 @@
 
 
 ### 2. Shuffle过程
+- shuffle是MapReduce过程的一个阶段。
+
 
 #### Hash Shuffle
 - spark1.2版本前使用的shuffle过程，spark2.0后移除。

@@ -120,10 +120,21 @@ class ScalaTest extends FunSuite{
     val random1 = Random
     val random2 = Random
     for(i <- 0 until 100000){
-      writer.write(reformatRandom(getGaussionRandom(e1, v1, random1)) +",0\n")
+      writer.write(reformatRandom(getGaussionRandom(e1, v1, random1)) +",\n")
     }
     for(i <- 0 until 2000){
       writer.write(reformatRandom(getGaussionRandom(e2, v2, random2)) +",1\n")
+    }
+    writer.close()
+  }
+
+  def generateRegressionScores(fileName:String, e1:Double, v1:Double, e2:Double, v2:Double): Unit ={
+    val writer = new PrintWriter(new File(s"d:/$fileName.csv"))
+    val random1 = Random
+    val random2 = Random
+    for(i <- 0 until 100000){
+      writer.write(reformatRandom(getGaussionRandom(e1, v1, random1)) +","
+        + reformatRandom(getGaussionRandom(e2, v2, random2)) +"\n")
     }
     writer.close()
   }
@@ -144,6 +155,25 @@ class ScalaTest extends FunSuite{
     generateScores("bad_score_test", 0.4,1, 0.7,1)
 
   }
+
+  test("regression test file"){
+    generateRegressionScores("reg_test1", 0.5, 0.1, 0.8, 0.05)
+  }
+
+  test("test regression metric"){
+    val data: Array[(Double, Double)] = readCsvFile("d:/reg_test1.csv")
+      .map(row => (row(0).toDouble, row(1).toDouble))
+      .map{ case (d1, d2) =>
+      (d1, threshold_func(0.5,d2))
+    }
+    computeAUC(data)
+  }
+
+  def threshold_func(thre:Double, datum:Double): Double = {
+    if(datum >= thre) 1.0
+    else 0.0
+  }
+
 
   test("test auc ks rmse"){
     // data : score, label
