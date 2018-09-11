@@ -14,6 +14,8 @@
 
 #### narrow dependency and wide dependency(窄依赖和宽依赖)
 - byKey的变换都是宽依赖，涉及到shuffle数据的过程
+- shuffle类似于hash keys into buckets
+- shuffle的过程会在磁盘上产生中间临时文件
 
 #### Job, Stage, Task
 - Spark程序内的每个Action操作会产生一个新Job的提交
@@ -27,6 +29,7 @@
 - Master,Worker是集群启动时配置的负责分配资源和具体执行任务的节点。
 - Driver和Executor是Spark应用启动时才有的，每个Spark应用有一个Driver和多个Executor，Driver会启动Spark Context，会向Master节点请求资源，Master会根据Worker节点的情况启动对应的Executor，每个Executor是Worker节点上启动的单独用于执行Task的进程。
 - Standalone模式会默认在每个Worker节点启动一个Executor，当使用YARN能更有效的利用和监控集群的资源使用情况，有效调度任务，按需分配Executor个数
+- Executor是spark应用在节点（worker）上启动的一个进程（process）
 - 一个Worker节点可以启动多个Executor，没必要在一个节点上启动多个Worker Instance。
 
 > https://stackoverflow.com/questions/24696777/what-is-the-relationship-between-workers-worker-instances-and-executors
@@ -52,6 +55,7 @@
 - spark1.2版本前使用的shuffle过程，spark2.0后移除。
 - 每个mapper会根据reducer个数，遍历所有record，生成R个文件。
 - 在shuffle过程中，集群最多会生成M\*R个文件，会造成文件系统效率低下及巨大的网络流量压力。
+- `spark.shuffle.consolidateFiles=true`能使得每个executor shuffle write在同一个文件，不会因reducer个数造成大量临时文件。
 
 #### Sort Shuffle
 - spark1.2后默认使用的shuffle过程。

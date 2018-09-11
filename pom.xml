@@ -103,6 +103,13 @@
         </dependency>
 
         <dependency>
+            <groupId>com.holdenkarau</groupId>
+            <artifactId>spark-testing-base_${scala.tools.version}</artifactId>
+            <version>${spark.version}_0.10.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
             <version>RELEASE</version>
