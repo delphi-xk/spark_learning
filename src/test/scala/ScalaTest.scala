@@ -220,4 +220,43 @@ class ScalaTest extends FunSuite{
     computeKS(testData)
     computeRMSE(testData)
   }
+
+  test("cartesion") {
+    val arr0 = List[String]()
+    val arr1 = List("a", "b", "c")
+    val arr2 = List("d", "e", "f")
+    val arr3 = List("g", "h", "i")
+    val arr4 = List(arr1, arr2, arr3)
+    val res1 = arr1.flatMap { str1: String =>
+      arr2.map{ str2:String => List[String](str1, str2) }
+    }
+//    println(res1)
+
+    val res2 = arr4.foldLeft(List[List[String]]()){ (cumArr:List[List[String]],addArr:List[String]) =>
+      if(cumArr.isEmpty && addArr.nonEmpty) addArr.map{ t2:String => List(t2) }
+      else if (cumArr.nonEmpty && addArr.isEmpty) cumArr
+      else cumArr.flatMap{ t1:List[String] => addArr.map{t2:String => t1 :+ t2 } }
+    }
+//    println(res2)
+
+  }
+
+
+  def cartesion_product(arrs:List[List[String]]): List[List[String]] = {
+    arrs.foldLeft(List[List[String]]()){ (cumArr:List[List[String]],addArr:List[String]) =>
+      if(cumArr.isEmpty && addArr.nonEmpty) addArr.map{ t2:String => List(t2) }
+      else if (cumArr.nonEmpty && addArr.isEmpty) cumArr
+      else cumArr.flatMap{ t1:List[String] => addArr.map{t2:String => t1 :+ t2 } }
+    }
+  }
+
+  test("test cartesion 2"){
+    val str_line = "a,b,c|d,e|f,g"
+    val row:List[String] = str_line.split("\\|").toList
+    val datum:List[List[String]] = row.map(ele => ele.split(",").toList)
+    println(datum)
+    val res = cartesion_product(datum)
+    println(res)
+  }
+
 }

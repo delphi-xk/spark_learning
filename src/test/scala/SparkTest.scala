@@ -5,10 +5,17 @@ import org.apache.spark.streaming.dstream.DStream
 import org.scalactic.Equality
 import org.scalatest.FunSuite
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
   * Created by xk on 2018/9/10.
   */
+
+
+
 class SparkTest extends FunSuite with SharedSparkContext{
+
+
 
   test("test initializing spark context") {
     val list = List(1, 2, 3, 4)
