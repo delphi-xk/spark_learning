@@ -2,7 +2,7 @@ package com.hyzs.spark.ml
 
 import java.io._
 
-import com.hyzs.spark.mllib.evaluation.ModelSummarizer
+import com.hyzs.spark.mllib.evaluation.{ConfusionMatrix, ModelSummarizer}
 import com.hyzs.spark.utils.BaseUtil._
 import org.apache.spark.mllib.linalg.Vectors
 
@@ -128,6 +128,19 @@ object ModelEvaluation extends App{
       writer.write(s"${point._1},${point._2}"+"\n")
     }
     writer.close()
+  }
+
+  // data should be tuple (prediction, label)
+  def formatInputData(threshold:Double, data:Array[(Double, Double)]): Array[(Double, Double)] = {
+    data.map{ datum =>
+      if(datum._1 < threshold) (0.0, datum._2)
+      else (1.0, datum._2)
+    }
+  }
+
+  def computeConfusionMatrix(threshold:Double, data:Array[(Double, Double)]): ConfusionMatrix = {
+    val testData = formatInputData(threshold, data)
+    new ConfusionMatrix(testData)
   }
 
 }

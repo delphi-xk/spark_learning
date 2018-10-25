@@ -80,8 +80,7 @@ object ConvertLibsvm_v2 {
     }.toMap
     (1 to dataSchema.length).zip(dataSchema).foreach{ case (index, field) =>
       val obj = field.dataType match {
-        case IntegerType => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
-        case DoubleType => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
+        case _:NumericType => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
         case DateType => ModelObject(index, Params.DATE_TYPE, field.name, Map())
         case TimestampType => ModelObject(index, Params.DATE_TYPE, field.name, Map())
         case StringType => ModelObject(index, Params.STRING_TYPE, field.name,
