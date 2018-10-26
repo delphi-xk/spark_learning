@@ -1,10 +1,13 @@
 package com.hyzs.spark.utils
 
 
+import java.io.IOException
+
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FileUtil, Path}
+import org.apache.hadoop.io.IOUtils
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -13,12 +16,14 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.SizeEstimator
 
+import scala.util.Try
+
 
 /**
   * Created by Administrator on 2018/1/24.
   */
 object SparkUtils {
-  val warehouseDir = "/user/hive/warehouse/"
+
   val spark:SparkSession = SparkSession
     .builder()
     .appName("Spark SQL basic example")
@@ -31,6 +36,7 @@ object SparkUtils {
   val hdConf: Configuration = sc.hadoopConfiguration
   val fs: FileSystem = FileSystem.get(hdConf)
 
+  val warehouseDir: String = conf.getOption("spark.sql.warehouse.dir").getOrElse("/user/hive/warehouse/")
   val partitionNums: Int = conf.getOption("spark.sql.shuffle.partitions").getOrElse("200").toInt
   val invalidRowPath = "/hyzs/invalidRows/"
   val mapper = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -63,11 +69,42 @@ object SparkUtils {
     FileUtil.copy(fs, path, fs, newPath, false, hdConf)
   }
 
+  def copyMerge(
+                 srcFS: FileSystem, srcDir: Path,
+                 dstFS: FileSystem, dstFile: Path,
+                 deleteSource: Boolean, conf: Configuration
+               ): Boolean = {
+
+    if (dstFS.exists(dstFile))
+      throw new IOException(s"Target $dstFile already exists")
+
+    // Source path is expected to be a directory:
+    if (srcFS.getFileStatus(srcDir).isDirectory()) {
+
+      val outputFile = dstFS.create(dstFile)
+      Try {
+        srcFS
+          .listStatus(srcDir)
+          .sortBy(_.getPath.getName)
+          .collect {
+            case status if status.isFile() =>
+              val inputFile = srcFS.open(status.getPath())
+              Try(IOUtils.copyBytes(inputFile, outputFile, conf, false))
+              inputFile.close()
+          }
+      }
+      outputFile.close()
+
+      if (deleteSource) srcFS.delete(srcDir, true) else true
+    }
+    else false
+  }
+
   def copyMergeHDFiles(srcFileDir:String, dstFile:String): Unit = {
     val srcDir = new Path(srcFileDir)
     val file = new Path(dstFile)
     fs.delete(file, true)
-    FileUtil.copyMerge(fs, srcDir, fs, file, false, hdConf, null)
+    copyMerge(fs, srcDir, fs, file, deleteSource=false, hdConf)
   }
 
   def processNull(df: Dataset[Row]): Dataset[Row] = {

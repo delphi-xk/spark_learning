@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.hyzs.spark.bean._
 import com.hyzs.spark.utils.Params
-import com.hyzs.spark.utils.SparkUtilsLocal._
+import com.hyzs.spark.utils.SparkUtils._
 import org.apache.spark.ml.feature.{MinMaxScaler, StringIndexer, StringIndexerModel, VectorAssembler}
 import org.apache.spark.ml.linalg.{Matrices, Vector}
 import org.apache.spark.rdd.RDD
@@ -29,13 +29,15 @@ object ConvertLibsvmLocal {
   val convertPath = "/Users/xiangkun/test_data/"
 
 
-  def getIndexers(df: Dataset[Row], col: String): (String, StringIndexerModel) = {
-    val indexer = new StringIndexer()
-      .setInputCol(col)
-      .setOutputCol(s"${col}_indexer")
-      .setHandleInvalid("skip")
-      .fit(df)
-    (col,indexer)
+  def getIndexerMap(df: Dataset[Row], strCols:Seq[String]): Map[String,Map[String,Int]] = {
+    strCols.map{colName =>
+      val labels = df.select(colName)
+        .filter(col(colName).isNotNull)
+        .distinct()
+        .take(maxLabelMapLength)
+        .map(row => row.getString(0))
+      (colName,labels.zip(1 to labels.length).toMap)
+    }.toMap
   }
 
   def strToLabel(stringMap:Map[String,Int])(str:String): Int = {
@@ -62,17 +64,9 @@ object ConvertLibsvmLocal {
   }
 
   def buildObjectArray(dataSchema:Seq[StructField],
-                  indexerArray:Seq[(String,StringIndexerModel)]): Array[ModelObject] = {
+                       indexerMap:Map[String,Map[String,Int]]): Array[ModelObject] = {
     val objList:ArrayBuffer[ModelObject] = new ArrayBuffer
     objList += ModelObject(0, Params.NO_TYPE, key, Map())
-    val indexerMap: Map[String,Map[String,Int]] = indexerArray.map{ case (name,model) =>
-      if(model.labels.length<maxLabelMapLength)
-        (name, model.labels.zip(1 to model.labels.length).toMap)
-      else{
-        val labels = model.labels.slice(0, maxLabelMapLength)
-        (name, labels.zip(1 to maxLabelMapLength).toMap)
-      }
-    }.toMap
     (1 to dataSchema.length).zip(dataSchema).foreach{ case (index, field) =>
       val obj = field.dataType match {
         case IntegerType => ModelObject(index, Params.NUMERIC_TYPE, field.name, Map())
@@ -196,9 +190,13 @@ object ConvertLibsvmLocal {
     trainModelData(processNull(data))
   }
 
+  def saveRdd(rdd:RDD[String], savePath:String): Unit = {
+    if(checkHDFileExist(savePath))
+      dropHDFiles(savePath)
+    rdd.saveAsTextFile(savePath)
+  }
 
   def convertLibsvm(args:Array[String]): Unit ={
-    //TODO: switch libsvm with or without label table
     //val args = Array("train")
     assert(args.length >= 1, "args length should be no less than 1! ")
     val tables = Seq("m1_test")
@@ -229,17 +227,12 @@ object ConvertLibsvmLocal {
 
       } else if(args.length >0 && args(0) == "train"){
         val allCols = sourceData.columns
-        val idCols = allCols.take(1)
-        val dataCols = allCols.drop(1)
         val dataSchema: Seq[StructField] = sourceData.schema.drop(1)
         val stringSchema = dataSchema.filter(field => field.dataType == StringType)
-        val timeSchema = dataSchema.filter(field => field.dataType == TimestampType)
         val stringCols = stringSchema.map(field => field.name)
-        val timeCols = timeSchema.map(field => field.name)
-        val numberCols = dataCols diff stringCols diff timeCols
+        val indexMap = getIndexerMap(sourceData, stringCols)
 
-        val indexerArray = stringCols.map(field => getIndexers(sourceData, field))
-        objectArray = buildObjectArray(dataSchema, indexerArray)
+        objectArray = buildObjectArray(dataSchema, indexMap)
         val objRdd:RDD[String] = buildObjectJsonRdd(objectArray)
 
         println("start save obj...")
@@ -253,6 +246,8 @@ object ConvertLibsvmLocal {
       val libsvm_result = label.join(libsvm_data, Seq(key), "left")
       saveTable(libsvm_result, "libsvm_result")
       println("start save libsvm file")
+      // row: key, label, dataCols...
+      // label = datum(1), dataCols = datum.drop(2)
       val libsvm_rdd: RDD[String] = libsvm_result.rdd.map(row => {
           val datum = row.toSeq
           castLibsvmString(datum(1).toString, datum.drop(2))
@@ -265,10 +260,28 @@ object ConvertLibsvmLocal {
     }
   }
 
+  def convertLibsvm2(): Unit = {
+    // label, col1, col2, ...
+    val sourceData = spark.read.parquet("/user/hyzs/datasets/particles_train")
+    val tmpDir = "/user/hyzs/tmp/particles_train/"
+    val libsvmPath = "/user/hyzs/libsvm/particles_train.libsvm"
+    mkHDdir(tmpDir)
+    dropHDFiles(libsvmPath)
+    val libsvm_rdd: RDD[String] = sourceData.rdd.map(row => {
+      val datum = row.toSeq
+      castLibsvmString(datum.head.toString, datum.drop(1))
+    })
+    // saveRdd(libsvm_rdd, tmpDir)
+    // copyMergeHDFiles(tmpDir, libsvmDir+"particles_train.libsvm")
+    saveRdd(libsvm_rdd.coalesce(1), libsvmPath)
+
+  }
+
+
   def main(args: Array[String]): Unit = {
     //prepareDataTable
-    convertLibsvm(args)
-
+    //convertLibsvm(args)
+    convertLibsvm2()
   }
 }
 
