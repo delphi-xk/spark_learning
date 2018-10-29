@@ -2,6 +2,7 @@ package com.hyzs.spark.mllib.evaluation
 
 /**
   * Created by xk on 2018/10/25.
+  * data: Array[(prediction, label)]
   */
 class ConfusionMatrix(data:Array[(Double, Double)]) extends ConfusionMatrixTrait {
 
