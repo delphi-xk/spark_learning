@@ -13,7 +13,10 @@ import scala.math.BigDecimal.RoundingMode
   */
 object ModelEvaluation extends App{
 
-
+  /**
+    *
+    * @param testData (prediction, label)
+    */
   def computeRMSE(testData:Array[(Double,Double)]): Unit ={
     val summary = testData.map{ case (score, label) => Vectors.dense(label, label-score)}
       .aggregate(new ModelSummarizer())(
