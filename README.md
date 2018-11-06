@@ -55,12 +55,16 @@
 - spark1.2版本前使用的shuffle过程，spark2.0后移除。
 - 每个mapper会根据reducer个数，遍历所有record，生成R个文件。
 - 在shuffle过程中，集群最多会生成M\*R个文件，会造成文件系统效率低下及巨大的网络流量压力。
-- `spark.shuffle.consolidateFiles=true`能使得每个executor shuffle write在同一个文件，不会因reducer个数造成大量临时文件。
+- `spark.shuffle.consolidateFiles=true`能使得每个executor shuffle write在同一个文件，core\*R个临时文件，不会因reducer个数造成大量临时文件。
+- 不需要排序
 
 #### Sort Shuffle
 - spark1.2后默认使用的shuffle过程。
-- 在mapper端将文件根据reducer id加上索引并排序，这样能直接传输整块数据块给每个需要数据的reducer；
-- 如果reducer个数不多（不超过`spark.shuffle.sort.bypassMergeThreshold`），将跳过合并和排序；
+- 在mapper端将文件根据reducer id加上索引并排序，生成整个临时文件；
+- 每个map生成M个临时文件（还有M个index文件）；
+- 排序后的文件能直接传输整块数据块给每个需要数据的reducer；
+- 如果reducer个数不多（不超过`spark.shuffle.sort.bypassMergeThreshold`），将跳过map端的临时文件合并和排序；
+- 使用AppendOnlyMap结构来存储map端输出在内存的数据
 - 如果没有足够的内存来存储map端输出的内容，将使用本地磁盘；
 - 参数`spark.shuffle.spill `能控制开启或关闭spill（默认开启）；
 - 减少map端生成的碎片文件数量；
