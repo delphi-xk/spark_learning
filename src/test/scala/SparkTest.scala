@@ -1,4 +1,4 @@
-import com.holdenkarau.spark.testing.{SharedSparkContext, StreamingSuiteBase}
+import com.holdenkarau.spark.testing.{RDDComparisons, SharedSparkContext, StreamingSuiteBase}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.DStream
@@ -13,9 +13,31 @@ import scala.collection.mutable.ArrayBuffer
 
 
 
-class SparkTest extends FunSuite with SharedSparkContext{
+class SparkTest extends FunSuite with SharedSparkContext with RDDComparisons {
 
 
+
+  test("test composite key ordering"){
+    implicit val compositeOrdering = new Ordering[(String, String)] {
+      override def compare(x: (String, String), y: (String, String)) =
+        if(x._1.compareTo(y._1) == 0){
+          x._2.compareTo(y._2)
+        } else x._1.compareTo(y._1)
+    }
+
+    val list = List(("A","1"), ("B", "1"),("A","2"), ("B", "7"), ("A","4"), ("B", "3"))
+    val rdd:RDD[(String, String)] = sc.parallelize(list)
+    val preferOrder = sc.makeRDD(
+      List((("A","1"), "1"), (("A","2"), "2"), (("A","4"), "4"), (("B", "1"), "1"), (("B", "3"),"3"), (("B", "7"), "7"))
+    )
+
+    val pairRdd: RDD[((String, String), String)] = rdd.map(data => (data, data._2))
+    val sortedRdd = pairRdd.sortByKey()
+    assertRDDEquals(pairRdd, sortedRdd)
+    //assert(None === compareRDDWithOrder(pairRdd, sortedRdd))
+    //assertRDDEqualsWithOrder(preferOrder, sortedRdd)
+
+  }
 
   test("test initializing spark context") {
     val list = List(1, 2, 3, 4)

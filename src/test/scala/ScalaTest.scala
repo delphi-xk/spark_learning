@@ -239,6 +239,8 @@ class ScalaTest extends FunSuite{
     }
 //    println(res2)
 
+    val cartesian_result = for(iter1 <- arr1; iter2 <- arr2) yield (iter1, iter2)
+    println(cartesian_result)
   }
 
 

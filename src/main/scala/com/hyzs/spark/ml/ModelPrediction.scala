@@ -1,9 +1,7 @@
 package com.hyzs.spark.ml
 
 import com.hyzs.spark.mllib.evaluation.ConfusionMatrix
-import com.hyzs.spark.ml.ModelEvaluation
 import com.hyzs.spark.utils.SparkUtils._
-import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.GBTClassifier
 import org.apache.spark.ml.evaluation.{MulticlassClassificationEvaluator, RegressionEvaluator}
 import org.apache.spark.ml.regression.{GBTRegressionModel, GBTRegressor}
@@ -20,6 +18,7 @@ import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
   */
 object ModelPrediction {
 
+  import spark.implicits._
   val libsvmPath = "/user/hyzs/libsvm/particles_train.libsvm"
   def prepareData(): (RDD[LabeledPoint],
     RDD[LabeledPoint],
