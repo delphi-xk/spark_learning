@@ -141,15 +141,42 @@ object ModelPrediction {
   }
 
 
+  def xgboost_ml(): Unit = {
+    val data = spark.read.format("libsvm").load(libsvmPath)
+    val Array(trainingData, testData) = data.randomSplit(Array(0.6, 0.4))
+    val xgbParam = Map("eta" -> 0.1f,
+      "max_depth" -> 6,
+      "objective" -> "binary:logistic",
+      "num_round" -> 10)
+
+    val xgbClassifier = new XGBoostClassifier(xgbParam).
+      setFeaturesCol("features").
+      setLabelCol("label")
+
+    val xgbClassificationModel = xgbClassifier.fit(trainingData)
+    val predictions = xgbClassificationModel.transform(testData)
+
+    val predAndLabels = predictions.select("prediction", "label")
+      .map(row => (row.getDouble(0), row.getDouble(1)))
+      .rdd
+      .collect()
+    val confusion = new ConfusionMatrix(predAndLabels)
+    println("model precision: " + confusion.precision)
+    println("model recall: " + confusion.recall)
+    println("model accuracy: " + confusion.accuracy)
+    println("model f1: " + confusion.f1_score)
+
+  }
 
 
   def main(args: Array[String]): Unit = {
-    val (trainingData, validData, testData) = prepareData()
-    println("random forest =======")
-    val randomForestModel = randomForest(trainingData, validData, testData)
-    println("gbt =======")
-    val gbt = GBT(trainingData, validData, testData)
-
+    /* val (trainingData, validData, testData) = prepareData()
+     println("random forest =======")
+     val randomForestModel = randomForest(trainingData, validData, testData)
+     println("gbt =======")
+     val gbt = GBT(trainingData, validData, testData)*/
+    println("xgboost =======")
+    xgboost_ml()
 
   }
 }
