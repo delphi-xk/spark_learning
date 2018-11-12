@@ -22,6 +22,7 @@ private[actor] class BaseActor extends Actor{
   override def postStop(): Unit = {
     println(s"${self.path} post stopped!")
   }
+
 }
 
 object Main extends App {

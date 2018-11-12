@@ -42,7 +42,7 @@ class SparkTest extends FunSuite with SharedSparkContext with RDDComparisons {
   test("test initializing spark context") {
     val list = List(1, 2, 3, 4)
     val rdd = sc.parallelize(list)
-
+    rdd.treeAggregate()
     assert(rdd.count === list.length)
   }
 
