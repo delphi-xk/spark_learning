@@ -15,9 +15,8 @@ object FilProcess extends App{
   var endDate = "2018-09-01 00:00:00"
   if(args.length >0) endDate = FilProcess.args(0)
   println("end date: " + endDate)
-  val broad_date = sc.broadcast(endDate)
 
-  def stampFunc(startDate:String): Int = {
+  def stampFunc(endDate:String)(startDate:String): Int = {
     val format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     var startDateUnix = 0L
     val slotSecs = 86400*30L
@@ -28,12 +27,12 @@ object FilProcess extends App{
         case e: ParseException => startDateUnix=0L
       }
     }
-    val endDateUnix = format.parse(broad_date.value).getTime / 1000L
+    val endDateUnix = format.parse(endDate).getTime / 1000L
     val stamp = Math.floor((endDateUnix - startDateUnix) / slotSecs)
     stamp.toInt
   }
 
-  val stampUdf = udf(stampFunc _)
+  val stampUdf = udf(stampFunc(endDate) _)
 
   val data = spark.table("test_convert_2w")
   val result = data.select("phone", "jdmall_user_p0008")
