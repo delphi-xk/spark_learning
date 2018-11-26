@@ -97,6 +97,11 @@
             <artifactId>spark-streaming_${scala.tools.version}</artifactId>
             <version>${spark.version}</version>
         </dependency>
+<!--        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-streaming-kafka-0-10_${scala.tools.version}</artifactId>
+            <version>${spark.version}</version>
+        </dependency>-->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-streaming-kafka-0-10-assembly_${scala.tools.version}</artifactId>
@@ -241,7 +246,6 @@
                     </descriptorRefs>
                     <archive>
                         <manifest>
-                            &lt;!&ndash; 此处指定main方法入口的class &ndash;&gt;
                             <mainClass>com.hyzs.spark.ml.ModelEvaluation</mainClass>
                         </manifest>
                     </archive>

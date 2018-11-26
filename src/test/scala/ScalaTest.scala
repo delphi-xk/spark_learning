@@ -2,7 +2,6 @@ import org.scalatest.FunSuite
 
 import scala.annotation.tailrec
 import java.io._
-import actors._, Actor._
 import com.hyzs.spark.ml.ModelEvaluation._
 import com.hyzs.spark.utils.BaseUtil
 import com.hyzs.spark.utils.BaseUtil._
