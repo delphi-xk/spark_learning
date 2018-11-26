@@ -12,7 +12,7 @@ import org.apache.spark.streaming.kafka010._
 object DirectKafkaWordCount {
   def main(args: Array[String]) {
 
-    val Array(brokers, groupId, topics) = Array("111.230.17.36:9094","testGroup02","jd_data01")
+    val Array(brokers, groupId, topics) = Array("111.230.17.36:9094","testGroup","kylin_streaming_topic")
 
     // Create context with 2 second batch interval
     val sparkConf = new SparkConf().setAppName("DirectKafkaWordCount").setMaster("local")
@@ -32,12 +32,12 @@ object DirectKafkaWordCount {
       ConsumerStrategies.Subscribe[String, String](topicsSet, kafkaParams))
 
     // Get the lines, split them into words, count the words and print
-    val lines = messages.map(_.value)
+/*    val lines = messages.map(_.value)
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1L)).reduceByKey(_ + _)
-    wordCounts.print()
+    wordCounts.print()*/
 
-/*    messages.foreachRDD{rdd =>
+    messages.foreachRDD{rdd =>
       val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
       rdd.foreachPartition { item =>
         val o: OffsetRange = offsetRanges(TaskContext.get.partitionId)
@@ -46,7 +46,7 @@ object DirectKafkaWordCount {
         println(s"The record content is ${item.toList.mkString}")
       }
       rdd.count()
-    }*/
+    }
 
     // Start the computation
     ssc.start()
