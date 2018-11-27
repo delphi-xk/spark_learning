@@ -12,10 +12,12 @@ import org.apache.spark.streaming.kafka010._
 object DirectKafkaWordCount {
   def main(args: Array[String]) {
 
-    val Array(brokers, groupId, topics) = Array("111.230.17.36:9094","testGroup","kylin_streaming_topic")
+    val Array(brokers, groupId, topics) = Array("111.230.17.36:9094","testGroup01","kylin_streaming_topic")
 
     // Create context with 2 second batch interval
-    val sparkConf = new SparkConf().setAppName("DirectKafkaWordCount").setMaster("local")
+    val sparkConf = new SparkConf()
+      .setAppName("DirectKafkaWordCount")
+      .setMaster("local[3]")
     val ssc = new StreamingContext(sparkConf, Seconds(10))
 
     // Create direct kafka stream with brokers and topics
@@ -42,16 +44,13 @@ object DirectKafkaWordCount {
 
     messages.foreachRDD{rdd =>
       val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
-      rdd.foreachPartition { item =>
-        val o: OffsetRange = offsetRanges(TaskContext.get.partitionId)
-        val i: ConsumerRecord[String, String] = item.next()
-        println(s"The record from topic [${o.topic}] is in partition ${o.partition} which offset from ${o.fromOffset} to ${o.untilOffset}")
-
-        println(s"The record range is (${i.topic()}, ${i.partition()}, ${i.offset()}, ${i.timestamp()}")
-        println(s"The record content is (${i.key()}, ${i.value()})")
+      offsetRanges.foreach( offsetRange => println(s"messages from [${offsetRange.toString()}]"))
+      rdd.foreach{ item =>
+        println(s"The record is ${item.toString}")
       }
-      rdd.count()
     }
+
+
 
     // Start the computation
     ssc.start()
