@@ -3,6 +3,7 @@ package com.hyzs.spark.sql
 import com.hyzs.spark.utils.SparkUtils._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.functions._
@@ -106,6 +107,50 @@ object NewDataProcess {
         "cast (avg_prefr_amount as string) avg_prefr_amount",
         "cast (avg_pay_amount as string) avg_pay_amount")
     saveTable(sample_order, "sample_order")
+  }
+
+  def findDuplicates(): Unit = {
+    val merchants = spark.table("merchant.merchants")
+    val count = merchants.select("merchant_id")
+      .rdd
+      .map(id => (id.getString(0), 1))
+      .reduceByKey(_ + _)
+      .toDF("merchant_id", "merchant_count")
+    merchants.join(count, Seq("merchant_id"), "left").filter("merchant_count > 1")
+  }
+
+  def getColumnMode(transData: Dataset[Row], keyColumn:String, modeColumn:String): Dataset[Row] = {
+    // generate "count"
+    val grouped = transData.groupBy(keyColumn, modeColumn).count()
+    // window by key, order by "count"
+    val window = Window.partitionBy(keyColumn).orderBy(desc("count"))
+    // get max count row
+    grouped.withColumn("order", row_number().over(window))
+      .filter("order = 1")
+      .select(keyColumn, modeColumn)
+  }
+
+  def getColumnAgg(transData:Dataset[Row], keyColumn:String, aggColumn:String): Dataset[Row] = {
+    transData.groupBy(keyColumn)
+      .agg(sum(aggColumn).as(s"sum_$aggColumn"),
+        avg(aggColumn).as(s"avg_$aggColumn")
+      )
+  }
+
+  def merchantProcess(): Unit = {
+    val keyColumn = "card_id"
+    var trainTable = spark.table("merchant.train")
+    val newTrans = spark.table("merchant.new_merchant_transactions")
+    val processMode  = Seq("city_id", "category_1", "installments", "category_3",
+      "merchant_category_id", "category_2", "state_id", "subsector_id")
+    for(colName <- processMode){
+      val modeTmpTable = getColumnMode(newTrans, keyColumn, colName)
+      trainTable = trainTable.join(modeTmpTable, Seq(keyColumn), "left")
+    }
+    saveTable(trainTable, "train_result", "merchant")
+
+
+
   }
 
   def main(args: Array[String]): Unit = {

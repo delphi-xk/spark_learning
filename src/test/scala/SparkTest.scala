@@ -1,4 +1,5 @@
 import com.holdenkarau.spark.testing.{RDDComparisons, SharedSparkContext, StreamingSuiteBase}
+import com.hyzs.spark.utils.SparkUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.DStream
@@ -131,6 +132,10 @@ class SampleStreamingTest extends FunSuite with StreamingSuiteBase {
     def multiply(ds: DStream[Int]) = ds.map(_ * 2)
 
     testOperation[Int, Int](input, multiply _, expectedOutput, ordered = true)
+  }
+
+  test("find duplicates"){
+
   }
 
 }

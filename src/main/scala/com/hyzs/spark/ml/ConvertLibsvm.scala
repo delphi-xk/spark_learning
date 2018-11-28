@@ -25,9 +25,9 @@ object ConvertLibsvm {
 
   val originalKey = "user_id"
   //val key = "user_id_md5"
-  val key = "id"
+  val key = "card_id"
   val maxLabelMapLength = 100
-  import spark.implicits._
+  val convertPath = "/user/hyzs/convert/"
 
   def getIndexers(df: Dataset[Row], col: String): (String, StringIndexerModel) = {
     val indexer = new StringIndexer()
@@ -42,6 +42,7 @@ object ConvertLibsvm {
     stringMap.getOrElse(str, 0)
   }
 
+  // dataSet  id, target, feature1, feature2, ...
   def replaceOldCols(df:Dataset[Row], objArray:Array[ModelObject]): Dataset[Row] = {
     val newColNames:Array[Column] = objArray.map{ obj =>
       val colName:Column = obj.fieldType match {
@@ -61,15 +62,20 @@ object ConvertLibsvm {
   }
 
   def saveRdd(rdd:RDD[String], savePath:String): Unit = {
-    if(checkHDFileExist(savePath))
-      dropHDFiles(savePath)
-    rdd.saveAsTextFile(savePath)
+    val tmpPath = "/tmp/rdd"
+    if(checkHDFileExist(tmpPath))
+      dropHDFiles(tmpPath)
+    rdd.saveAsTextFile(tmpPath)
+    copyMergeHDFiles(tmpPath, savePath)
   }
 
-  def buildObjectArray(dataSchema:Seq[StructField],
+  // ignoreCols
+  def buildObjectArray(ignoreCols: Array[String], dataSchema:Seq[StructField],
                   indexerArray:Seq[(String,StringIndexerModel)]): Array[ModelObject] = {
     val objList:ArrayBuffer[ModelObject] = new ArrayBuffer
-    objList += ModelObject(0, Params.NO_TYPE, key, Map())
+    for(ignore <- ignoreCols){
+      objList += ModelObject(0, Params.NO_TYPE, ignore, Map())
+    }
     val indexerMap: Map[String,Map[String,Int]] = indexerArray.map{ case (name,model) =>
       if(model.labels.length<maxLabelMapLength)
         (name, model.labels.zip(1 to model.labels.length).toMap)
@@ -93,7 +99,6 @@ object ConvertLibsvm {
   }
 
   def buildObjectJsonRdd(objList:Array[ModelObject]): RDD[String] = {
-
     val objRdd:RDD[ModelObject] = sc.parallelize(objList)
     val objStr:RDD[String] = objRdd.mapPartitions({ iter:Iterator[ModelObject] =>
       val mapper = new ObjectMapper
@@ -104,7 +109,6 @@ object ConvertLibsvm {
     objStr
 
   }
-
 
   def readObj(filePath:String): Array[ModelObject] = {
     val objRdd = sc.textFile(filePath)
@@ -134,10 +138,7 @@ object ConvertLibsvm {
     JDDataProcess.trainModelData(processNull(data))
   }
 
-
-
   def convertLibsvm(args:Array[String]): Unit ={
-    //TODO: switch libsvm with or without label table
     //val args = Array("train")
     val tables = Seq("m1_test")
     val labels = Seq("m1_label")
@@ -182,7 +183,7 @@ object ConvertLibsvm {
         val numberCols = dataCols diff stringCols diff timeCols
 
         val indexerArray = stringCols.map(field => getIndexers(result, field))
-        objectArray = buildObjectArray(dataSchema, indexerArray)
+        objectArray = buildObjectArray(Array(key), dataSchema, indexerArray)
         val objRdd:RDD[String] = buildObjectJsonRdd(objectArray)
 
         if(checkHDFileExist(modelPath))dropHDFiles(modelPath)
@@ -215,9 +216,47 @@ object ConvertLibsvm {
     }
   }
 
+  // dataSet  id, target, feature1, feature2, ...
+  def trainObjectArray(dataSet: Dataset[Row], tableName:String):Array[ModelObject] = {
+    val taskPath = s"$convertPath$tableName/"
+
+    val dataSchema: Seq[StructField] = dataSet.schema.drop(2)
+    val stringSchema = dataSchema.filter(field => field.dataType == StringType)
+    val stringCols = stringSchema.map(field => field.name)
+    val indexerArray = stringCols.map(field => getIndexers(dataSet, field))
+    val objectArray = buildObjectArray(Array(key, "target"), dataSchema, indexerArray)
+    val objRdd:RDD[String] = buildObjectJsonRdd(objectArray)
+    val nameRdd = sc.makeRDD[String](dataSet.columns)
+
+    println(s"start save obj: ${objRdd.first()} ...")
+    saveRdd(objRdd, s"$taskPath$tableName.obj")
+    println(s"start save name: ${nameRdd.first()} ...")
+    saveRdd(nameRdd, s"$taskPath$tableName.name")
+    println(s"merge obj files to $taskPath$tableName.obj.")
+    objectArray
+  }
+
+  // dataSet  id, target, feature1, feature2, ...
+  def convertLibsvmFromDataSet(dataSet:Dataset[Row]): Unit = {
+    val tableName = "tmpResult"
+    val taskPath = s"$convertPath$tableName/"
+
+    val sourceData = processNull(dataSet)
+    val objectArray = trainObjectArray(sourceData, tableName)
+    val libsvm_result = replaceOldCols(sourceData, objectArray)
+    val indexRdd:RDD[String] = libsvm_result.select(key).rdd.map(row => row(0).toString)
+    val libsvmRdd: RDD[String] = libsvm_result.rdd.map(row => {
+      val datum = row.toSeq
+      castLibsvmString(datum(1).toString, datum.drop(2))
+    })
+    saveRdd(indexRdd, s"$taskPath$tableName.index")
+    saveRdd(libsvmRdd, s"$taskPath$tableName.libsvm")
+
+  }
+
   def main(args: Array[String]): Unit = {
-    //prepareDataTable
-    convertLibsvm(args)
+    val data = spark.table("merchant.tmpResult")
+    convertLibsvmFromDataSet(data)
 
   }
 }
