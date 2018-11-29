@@ -164,6 +164,7 @@ object NewDataProcess {
     }
     val aggTable = getColumnAgg(trans, keyColumn, "purchase_amount")
     ids = ids.join(aggTable, Seq(keyColumn), "left")
+    ids = addColumnsPrefix(ids, "historical", Array(keyColumn))
     saveTable(ids, "historical_transactions_processed", "merchant")
   }
 
@@ -174,15 +175,19 @@ object NewDataProcess {
     var testTable = spark.table("merchant.test").withColumn("target", lit(0))
       .select("card_id", "target", "feature_1", "feature_2", "feature_3")
     val transTable = spark.table("merchant.new_transactions_processed")
+    val hisTable = spark.table("merchant.historical_transactions_processed")
 
     trainTable = trainTable.join(transTable, Seq(keyColumn), "left")
+        .join(hisTable, Seq(keyColumn), "left")
     saveTable(trainTable, "train_result", "merchant")
     testTable = testTable.join(transTable, Seq(keyColumn), "left")
+      .join(hisTable, Seq(keyColumn), "left")
     saveTable(testTable, "test_result", "merchant")
   }
 
   def main(args: Array[String]): Unit = {
     transProcess()
+    hisProcess()
     merchantProcess()
   }
 

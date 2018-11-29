@@ -15,7 +15,7 @@ import org.apache.spark.sql.{Dataset, Row, SQLContext, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.SizeEstimator
-
+import org.apache.spark.sql.functions._
 import scala.util.Try
 
 
@@ -206,14 +206,14 @@ object SparkUtils {
     SizeEstimator.estimate(rdd)
   }
 
-  // for test
-/*  case class Person(name : String , age : Int)
-
-  def createDatasetTest(): Unit ={
-    val personRDD = sc.makeRDD(Seq(Person("A",10),Person("B",20)))
-    val personDF = spark.createDataFrame(personRDD)
-    val ds:Dataset[Person] = personDF.as[Person]
-  }*/
+  def addColumnsPrefix(dataSet:Dataset[Row],
+                         colPrefix:String,
+                         ignoreCols:Array[String]): Dataset[Row] = {
+    dataSet.select(
+      dataSet.columns.map( fieldName =>
+        if(ignoreCols.contains(fieldName)) col(fieldName)
+        else col(fieldName).as(s"${colPrefix}__$fieldName") ): _*)
+  }
 
 }
 
