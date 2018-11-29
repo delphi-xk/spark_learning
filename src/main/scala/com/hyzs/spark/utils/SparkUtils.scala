@@ -36,7 +36,7 @@ object SparkUtils {
   val hdConf: Configuration = sc.hadoopConfiguration
   val fs: FileSystem = FileSystem.get(hdConf)
 
-  val warehouseDir: String = conf.getOption("spark.sql.warehouse.dir").getOrElse("/user/hive/warehouse/")
+  val warehouseDir: String = conf.getOption("spark.sql.warehouse.dir").getOrElse("/user/hive/warehouse")
   val partitionNums: Int = conf.getOption("spark.sql.shuffle.partitions").getOrElse("200").toInt
   val invalidRowPath = "/hyzs/invalidRows/"
   val mapper = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -110,21 +110,28 @@ object SparkUtils {
   def processNull(df: Dataset[Row]): Dataset[Row] = {
     df.na.fill(0.0)
       .na.fill("0.0")
-      .na.replace("*", Map("" -> "0.0", "null" -> "0.0", -9999 -> 0.0))
+      .na.replace("*", Map("" -> "0.0", "null" -> "0.0"))
   }
+
+  def processZeroValue(df: Dataset[Row]): Dataset[Row] = {
+    df.na
+      .replace("*", Map(0 -> 1, 0.0 -> 1))
+  }
+
 
   def saveTable(df: Dataset[Row], tableName:String, dbName:String = "default"): Unit = {
 
     spark.sql(s"drop table if exists $dbName.$tableName")
     var path = ""
     if(dbName != "default"){
-      path = s"$warehouseDir$dbName.db/$tableName"
+      path = s"$warehouseDir/$dbName.db/$tableName"
     }
     else{
-      path = s"$warehouseDir$tableName"
+      path = s"$warehouseDir/$tableName"
     }
     if(checkHDFileExist(path))dropHDFiles(path)
     df.write
+      .option("path", path)
       .saveAsTable(s"$dbName.$tableName")
   }
 

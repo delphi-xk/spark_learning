@@ -137,52 +137,53 @@ object NewDataProcess {
       )
   }
 
-  def merchantProcess(): Unit = {
+  def transProcess(): Unit = {
     val keyColumn = "card_id"
-    var trainTable = spark.table("merchant.train")
     val newTrans = spark.table("merchant.new_merchant_transactions")
+    var ids = newTrans.select(keyColumn).distinct()
     val processMode  = Seq("city_id", "category_1", "installments", "category_3",
       "merchant_category_id", "category_2", "state_id", "subsector_id")
     for(colName <- processMode){
       val modeTmpTable = getColumnMode(newTrans, keyColumn, colName)
-      trainTable = trainTable.join(modeTmpTable, Seq(keyColumn), "left")
+      ids = ids.join(modeTmpTable, Seq(keyColumn), "left")
     }
+    val aggTable = getColumnAgg(newTrans, keyColumn, "purchase_amount")
+    ids = ids.join(aggTable, Seq(keyColumn), "left")
+    saveTable(ids, "new_transactions_processed", "merchant")
+  }
+
+  def hisProcess(): Unit = {
+    val keyColumn = "card_id"
+    val trans = spark.table("merchant.historical_transactions")
+    var ids = trans.select(keyColumn).distinct()
+    val processMode  = Seq("city_id", "category_1", "installments", "category_3",
+      "merchant_category_id", "category_2", "state_id", "subsector_id")
+    for(colName <- processMode){
+      val modeTmpTable = getColumnMode(trans, keyColumn, colName)
+      ids = ids.join(modeTmpTable, Seq(keyColumn), "left")
+    }
+    val aggTable = getColumnAgg(trans, keyColumn, "purchase_amount")
+    ids = ids.join(aggTable, Seq(keyColumn), "left")
+    saveTable(ids, "historical_transactions_processed", "merchant")
+  }
+
+  def merchantProcess(): Unit = {
+    val keyColumn = "card_id"
+    var trainTable = spark.table("merchant.train")
+      .select("card_id", "target", "feature_1", "feature_2", "feature_3")
+    var testTable = spark.table("merchant.test").withColumn("target", lit(0))
+      .select("card_id", "target", "feature_1", "feature_2", "feature_3")
+    val transTable = spark.table("merchant.new_transactions_processed")
+
+    trainTable = trainTable.join(transTable, Seq(keyColumn), "left")
     saveTable(trainTable, "train_result", "merchant")
-
-
-
+    testTable = testTable.join(transTable, Seq(keyColumn), "left")
+    saveTable(testTable, "test_result", "merchant")
   }
 
   def main(args: Array[String]): Unit = {
-    //preprocessOrder()
-    val key = "id"
-    val table = spark.table("sample_n_enc")
-    val sample1 = spark.table("sample_w_enc")
-    val rowTable = columnToRow(table)
-    saveTable(rowTable, "sample_2")
-
-    val sample_features = sample1.join(table, Seq("id"), "left")
-    saveTable(sample_features, "sample_features")
-
-    val all = spark.table("hyzs.all_data")
-
-    //val diffCols = all.columns diff sample_features.columns
-
-    val order = spark.table("sample_order")
-    //spark.sql("drop table sample_fix")
-    //spark.sql("create table sample_fix(id string, brs_brs_p0001308 string, mkt_schd_p0001328 string, mkt_schd_p0001327 string)")
-
-    val fix = spark.table("sample_fix")
-    val features = sample_features.join(fix, Seq("id"), "left")
-      .selectExpr("id"+:(all.columns diff Seq("user_id", "user_id_md5")): _*)
-    saveTable(features, "features")
-    val sample_all = order.join(features, Seq("id"), "right")
-    saveTable(sample_all, "sample_all")
-    sample_all
-      .coalesce(1)
-      .write.format("com.databricks.spark.csv")
-      .option("header", "true")
-      .save("/hyzs/test_data/sample_all.csv")
+    transProcess()
+    merchantProcess()
   }
 
 }
