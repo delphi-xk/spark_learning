@@ -15,6 +15,7 @@ import org.apache.spark.mllib.util.MLUtils
 import ml.dmlc.xgboost4j.scala.spark.XGBoostClassifier
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
+import org.apache.spark.mllib.evaluation.RegressionMetrics
 /**
   * Created by xk on 2018/10/26.
   */
@@ -82,7 +83,8 @@ object ModelPrediction {
     // goal should be "Classification" or "Regression"
     val boostingStrategy: BoostingStrategy = BoostingStrategy.defaultParams(goal)
     boostingStrategy.setNumIterations(100) // Note: Use more iterations in practice. eg. 10, 20
-    boostingStrategy.setLearningRate(0.005)
+    boostingStrategy.setLearningRate(0.001)
+    boostingStrategy.setValidationTol(0.000001)
     //boostingStrategy.treeStrategy.setNumClasses(2)
     boostingStrategy.treeStrategy.setMaxDepth(5)
     boostingStrategy.treeStrategy.setImpurity(Variance)
@@ -93,8 +95,8 @@ object ModelPrediction {
     //boostingStrategy.treeStrategy.setImpurity(Gini)
 
     // without validation
-    val model = GradientBoostedTrees.train(trainingData, boostingStrategy)
-    //val model = new GradientBoostedTrees(boostingStrategy).runWithValidation(trainingData, validData)
+    //val model = GradientBoostedTrees.train(trainingData, boostingStrategy)
+    val model = new GradientBoostedTrees(boostingStrategy).runWithValidation(trainingData, validData)
 
     if(goal == "Classification"){
       val predAndLabels = testData.map { point =>
@@ -107,14 +109,23 @@ object ModelPrediction {
       println("model accuracy: " + confusion.accuracy)
       println("model f1: " + confusion.f1_score)
     } else if (goal == "Regression"){
-      val labelsAndPredictions = testData.map { point =>
+      val trainPreds = trainingData.map{ point =>
         val prediction = model.predict(point.features)
-        (point.label, prediction)
+        (prediction, point.label)
       }
-      val testMSE = labelsAndPredictions.map{ case (v, p) => math.pow(v - p, 2) }.mean()
+      val predAndLabels = testData.map { point =>
+        val prediction = model.predict(point.features)
+        (prediction, point.label)
+      }
+
+/*      val testMSE = predAndLabels.map{ case (p, l) => math.pow(p-l, 2) }.mean()
       val rmse = math.sqrt(testMSE)
-      println(s"Test Mean Squared Error = $testMSE")
-      println(s"Root Mean Squared Error = $rmse")
+      println(s"Root Mean Squared Error = $rmse")*/
+
+      val trainMetric = new RegressionMetrics(trainPreds)
+      val testMetric= new RegressionMetrics(predAndLabels)
+      println(s"train RMSE = ${trainMetric.rootMeanSquaredError}")
+      println(s"test RMSE = ${testMetric.rootMeanSquaredError}")
       println(s"Learned regression tree model:\n ${model.toDebugString}")
       val modelPath = "/user/hyzs/model/gbt_regression"
       println(s"save model to $modelPath")
@@ -212,8 +223,8 @@ object ModelPrediction {
     xgboost_ml()*/
     val rawData = MLUtils
       .loadLibSVMFile(sc, "/user/hyzs/convert/train_result/train_result.libsvm")
-      .randomSplit(Array(0.7, 0.3))
-    GBT(rawData(0), null, rawData(1), "Regression")
+      .randomSplit(Array(0.4, 0.2, 0.4))
+    GBT(rawData(0), rawData(1), rawData(2), "Regression")
     predictModel()
 
   }
