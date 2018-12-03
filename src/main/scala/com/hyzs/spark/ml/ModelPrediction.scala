@@ -12,10 +12,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.util.MLUtils
-import ml.dmlc.xgboost4j.scala.spark.XGBoostClassifier
+import ml.dmlc.xgboost4j.scala.spark.{XGBoostClassifier, XGBoostRegressor}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.evaluation.RegressionMetrics
+import org.apache.spark.sql.{Dataset, Row}
 /**
   * Created by xk on 2018/10/26.
   */
@@ -83,12 +84,12 @@ object ModelPrediction {
     // goal should be "Classification" or "Regression"
     val boostingStrategy: BoostingStrategy = BoostingStrategy.defaultParams(goal)
     boostingStrategy.setNumIterations(100) // Note: Use more iterations in practice. eg. 10, 20
-    boostingStrategy.setLearningRate(0.001)
+    boostingStrategy.setLearningRate(0.0001)
     boostingStrategy.setValidationTol(0.000001)
     //boostingStrategy.treeStrategy.setNumClasses(2)
-    boostingStrategy.treeStrategy.setMaxDepth(5)
+    boostingStrategy.treeStrategy.setMaxDepth(6)
     boostingStrategy.treeStrategy.setImpurity(Variance)
-    boostingStrategy.treeStrategy.setMaxBins(32)
+    //boostingStrategy.treeStrategy.setMaxBins(64)
     // Empty categoricalFeaturesInfo indicates all features are continuous.
     // boostingStrategy.treeStrategy.categoricalFeaturesInfo = Map[Int, Int]()
     //boostingStrategy.treeStrategy.setImpurity(Entropy)
@@ -174,31 +175,77 @@ object ModelPrediction {
 
   }
 
-  def xgboost_ml(): Unit = {
-    val data = spark.read.format("libsvm").load(libsvmPath)
-    val Array(trainingData, testData) = data.randomSplit(Array(0.6, 0.4))
-    val xgbParam = Map("eta" -> 0.1f,
-      "max_depth" -> 6,
-      "objective" -> "binary:logistic",
-      "num_round" -> 10)
+  def xgboost_ml(trainingData: Dataset[Row],
+                         validData: Dataset[Row],
+                         testData:Dataset[Row],
+                         goal:String): Unit = {
 
-    val xgbClassifier = new XGBoostClassifier(xgbParam).
-      setFeaturesCol("features").
-      setLabelCol("label")
+    if( goal == "Classification"){
+      val xgbParam = Map("eta" -> 0.1f,
+        "max_depth" -> 6,
+        "objective" -> "binary:logistic",
+        "num_round" -> 10)
 
-    val xgbClassificationModel = xgbClassifier.fit(trainingData)
-    val predictions = xgbClassificationModel.transform(testData)
+      val xgbClassifier = new XGBoostClassifier(xgbParam).
+        setFeaturesCol("features").
+        setLabelCol("label")
 
-    val predAndLabels = predictions.select("prediction", "label")
+      val xgbClassificationModel = xgbClassifier.fit(trainingData)
+      val predictions = xgbClassificationModel.transform(testData)
+
+      val predAndLabels = predictions.select("prediction", "label")
+        .map(row => (row.getDouble(0), row.getDouble(1)))
+        .rdd
+        .collect()
+      val confusion = new ConfusionMatrix(predAndLabels)
+      println("model precision: " + confusion.precision)
+      println("model recall: " + confusion.recall)
+      println("model accuracy: " + confusion.accuracy)
+      println("model f1: " + confusion.f1_score)
+    } else if (goal == "Regression"){
+      val xgbParam = Map(
+        "max_depth" -> 6,
+        "alpha" -> 0.0001f,
+        "objective" -> "reg:linear",
+        "top_k" -> "13",
+        "booster" -> "gbtree",
+        "eta" -> 0.001f,
+        "eval_metric" -> "rmse",
+        "num_round" -> 400)
+      val xgbReg = new XGBoostRegressor(xgbParam)
+        .setFeaturesCol("features").setLabelCol("label")
+
+      val xgbRegModel = xgbReg.fit(trainingData)
+      //val trainPreds = xgbRegModel.transform(trainingData)
+      val validPreds = xgbRegModel.transform(validData)
+      val testPreds = xgbRegModel.transform(testData)
+
+      //val trainMetric = getRegressionMetrics(trainPreds)
+      val validMetric= getRegressionMetrics(validPreds)
+
+      //println(s"train RMSE = ${trainMetric.rootMeanSquaredError}")
+      println(s"valid RMSE = ${validMetric.rootMeanSquaredError}")
+
+      println(s"Learned regression tree model:\n ${xgbRegModel.summary}")
+
+      val modelPath = "/user/hyzs/model/xgboost_regression"
+      println(s"save model to $modelPath")
+      if(checkHDFileExist(modelPath)) dropHDFiles(modelPath)
+      xgbRegModel.save(modelPath)
+
+      val predPath = "/user/hyzs/convert/test_result/preds.txt"
+      val preds = testPreds.select("prediction").rdd.map(row => row.get(0).toString)
+      println(s"save preds to $predPath")
+      saveRdd(preds, predPath)
+    } else throw new IllegalArgumentException(s"$goal is not supported by boosting.")
+
+  }
+
+  def getRegressionMetrics(preds:Dataset[Row]): RegressionMetrics = {
+    val predAndLabels = preds.select("prediction", "label")
       .map(row => (row.getDouble(0), row.getDouble(1)))
       .rdd
-      .collect()
-    val confusion = new ConfusionMatrix(predAndLabels)
-    println("model precision: " + confusion.precision)
-    println("model recall: " + confusion.recall)
-    println("model accuracy: " + confusion.accuracy)
-    println("model f1: " + confusion.f1_score)
-
+    new RegressionMetrics(predAndLabels)
   }
 
   def predictModel(): Unit = {
@@ -210,7 +257,6 @@ object ModelPrediction {
       model.predict(record.features).toString
     }
     saveRdd(preds, "/user/hyzs/convert/test_result/preds.txt")
-
   }
 
   def main(args: Array[String]): Unit = {
@@ -221,11 +267,19 @@ object ModelPrediction {
      val gbt = GBT(trainingData, validData, testData)*/
 /*    println("xgboost =======")
     xgboost_ml()*/
-    val rawData = MLUtils
+
+/*    val rawData = MLUtils
       .loadLibSVMFile(sc, "/user/hyzs/convert/train_result/train_result.libsvm")
       .randomSplit(Array(0.4, 0.2, 0.4))
     GBT(rawData(0), rawData(1), rawData(2), "Regression")
-    predictModel()
+    predictModel()*/
+
+    val data = spark.read.format("libsvm")
+      .load("/user/hyzs/convert/train_result/train_result.libsvm")
+    val testData = spark.read.format("libsvm")
+      .load("/user/hyzs/convert/test_result/test_result.libsvm")
+    val Array(trainingData, validData) = data.randomSplit(Array(0.6, 0.4))
+    xgboost_ml(trainingData, validData, testData, "Regression")
 
   }
 }

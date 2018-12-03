@@ -239,8 +239,8 @@ object ConvertLibsvm {
   // dataSet  id, target, feature1, feature2, ...
   def convertLibsvmFromDataSet(dataSet:Dataset[Row], tableName:String, objs:Array[ModelObject]=null): Unit = {
     val taskPath = s"$convertPath$tableName/"
-    val processedData = processZeroValue(dataSet)
-    val sourceData = processNull(processedData)
+    //val processedData = processZeroValue(dataSet)
+    val sourceData = processNull(dataSet)
     var objectArray:Array[ModelObject] = null
     if(objs == null){
       objectArray = trainObjectArray(sourceData, tableName)
