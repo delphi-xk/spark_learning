@@ -204,12 +204,15 @@ object ModelPrediction {
       println("model f1: " + confusion.f1_score)
     } else if (goal == "Regression"){
       val xgbParam = Map(
-        "max_depth" -> 6,
-        "alpha" -> 0.0001f,
+        "max_depth" -> 5,
+        "alpha" -> 0.01f,
+        "subsample" -> 0.5,
+        //"colsample_bytree" -> 0.7,
         "objective" -> "reg:linear",
-        "top_k" -> "13",
+        //"top_k" -> "13",
         "booster" -> "gbtree",
-        "eta" -> 0.001f,
+        "eta" -> 0.1f,
+        "gamma" -> 0.5,
         "eval_metric" -> "rmse",
         "num_round" -> 400)
       val xgbReg = new XGBoostRegressor(xgbParam)
@@ -278,7 +281,7 @@ object ModelPrediction {
       .load("/user/hyzs/convert/train_result/train_result.libsvm")
     val testData = spark.read.format("libsvm")
       .load("/user/hyzs/convert/test_result/test_result.libsvm")
-    val Array(trainingData, validData) = data.randomSplit(Array(0.6, 0.4))
+    val Array(trainingData, validData) = data.randomSplit(Array(0.6, 0.4), seed = 1234l)
     xgboost_ml(trainingData, validData, testData, "Regression")
 
   }
