@@ -131,7 +131,8 @@ object NewDataProcess {
   }
 
   def getColumnAgg(transData:Dataset[Row], keyColumn:String, aggColumn:String): Dataset[Row] = {
-    transData.groupBy(keyColumn)
+    transData.select(col(keyColumn), col(aggColumn).cast("double"))
+      .groupBy(keyColumn)
       .agg(sum(aggColumn).as(s"sum_$aggColumn"),
         avg(aggColumn).as(s"avg_$aggColumn")
       )
@@ -140,32 +141,76 @@ object NewDataProcess {
   def transProcess(): Unit = {
     val keyColumn = "card_id"
     val newTrans = spark.table("merchant.new_merchant_transactions")
-    var ids = newTrans.select(keyColumn).distinct()
+    val ids = newTrans.select(keyColumn).distinct()
+    ids.cache()
+    val dropCols = Array("merchant_category_id", "subsector_id", "category_1", "city_id", "state_id", "category_2")
+    val merchants = spark.table("merchant.merchants").dropDuplicates(Array("merchant_id"))
+      .drop(dropCols: _*)
+    val tmpTrans = newTrans.join(merchants, Seq("merchant_id"), "left")
+    tmpTrans.cache()
+
+    var tmpModeRes = ids
     val processMode  = Seq("city_id", "category_1", "installments", "category_3",
-      "merchant_category_id", "category_2", "state_id", "subsector_id")
+      "merchant_category_id", "category_2", "state_id", "subsector_id",
+      "merchant_group_id", "category_4")
     for(colName <- processMode){
-      val modeTmpTable = getColumnMode(newTrans, keyColumn, colName)
-      ids = ids.join(modeTmpTable, Seq(keyColumn), "left")
+      val modeTmpTable = getColumnMode(tmpTrans, keyColumn, colName)
+      tmpModeRes = tmpModeRes.join(modeTmpTable, Seq(keyColumn), "left")
     }
-    val aggTable = getColumnAgg(newTrans, keyColumn, "purchase_amount")
-    ids = ids.join(aggTable, Seq(keyColumn), "left")
-    saveTable(ids, "new_transactions_processed", "merchant")
+    saveTable(tmpModeRes, "tmp_mode_res", "merchant")
+
+    var tmpAggRes = ids
+    val aggCols = Array("purchase_amount", "numerical_1", "numerical_2", "avg_sales_lag3", "avg_purchases_lag3",
+      "avg_sales_lag6", "avg_purchases_lag6", "avg_sales_lag12", "avg_purchases_lag12")
+    for(aggCol <- aggCols){
+      val aggTable = getColumnAgg(tmpTrans, keyColumn, aggCol)
+      tmpAggRes = tmpAggRes.join(aggTable, Seq(keyColumn), "left")
+    }
+    saveTable(tmpAggRes, "tmp_agg_res", "merchant")
+
+    val modeRes = spark.table("merchant.tmp_mode_res")
+    val aggRes = spark.table("merchant.tmp_agg_res")
+    val tmpRes = modeRes.join(aggRes, Seq(keyColumn), "left")
+
+    saveTable(tmpRes, "new_transactions_processed", "merchant")
   }
 
   def hisProcess(): Unit = {
     val keyColumn = "card_id"
-    val trans = spark.table("merchant.historical_transactions")
-    var ids = trans.select(keyColumn).distinct()
+    val hisTrans = spark.table("merchant.historical_transactions")
+    val ids = hisTrans.select(keyColumn).distinct()
+    ids.cache()
+    val dropCols = Array("merchant_category_id", "subsector_id", "category_1", "city_id", "state_id", "category_2")
+    val merchants = spark.table("merchant.merchants").dropDuplicates(Array("merchant_id"))
+      .drop(dropCols: _*)
+    val tmpTrans = hisTrans.join(merchants, Seq("merchant_id"), "left")
+    //tmpTrans.cache()
+
+    var tmpModeRes = ids
     val processMode  = Seq("city_id", "category_1", "installments", "category_3",
-      "merchant_category_id", "category_2", "state_id", "subsector_id")
+      "merchant_category_id", "category_2", "state_id", "subsector_id",
+      "merchant_group_id", "category_4")
     for(colName <- processMode){
-      val modeTmpTable = getColumnMode(trans, keyColumn, colName)
-      ids = ids.join(modeTmpTable, Seq(keyColumn), "left")
+      val modeTmpTable = getColumnMode(tmpTrans, keyColumn, colName)
+      tmpModeRes = tmpModeRes.join(modeTmpTable, Seq(keyColumn), "left")
     }
-    val aggTable = getColumnAgg(trans, keyColumn, "purchase_amount")
-    ids = ids.join(aggTable, Seq(keyColumn), "left")
-    ids = addColumnsPrefix(ids, "historical", Array(keyColumn))
-    saveTable(ids, "historical_transactions_processed", "merchant")
+    saveTable(tmpModeRes, "tmp_mode_res", "merchant")
+
+    var tmpAggRes = ids
+    val aggCols = Array("purchase_amount", "numerical_1", "numerical_2")
+      //"avg_sales_lag3", "avg_purchases_lag3", "avg_sales_lag6", "avg_purchases_lag6", "avg_sales_lag12", "avg_purchases_lag12")
+    for(aggCol <- aggCols){
+      val aggTable = getColumnAgg(tmpTrans, keyColumn, aggCol)
+      tmpAggRes = tmpAggRes.join(aggTable, Seq(keyColumn), "left")
+    }
+    saveTable(tmpAggRes, "tmp_agg_res", "merchant")
+
+    val modeRes = spark.table("merchant.tmp_mode_res")
+    val aggRes = spark.table("merchant.tmp_agg_res")
+    val tmpRes = addColumnsPrefix(modeRes.join(aggRes, Seq(keyColumn), "left"),
+      "historical", Array(keyColumn))
+
+    saveTable(tmpRes, "historical_transactions_processed", "merchant")
   }
 
   def merchantProcess(): Unit = {
@@ -186,8 +231,8 @@ object NewDataProcess {
   }
 
   def main(args: Array[String]): Unit = {
-    transProcess()
-    hisProcess()
+    //transProcess()
+    //hisProcess()
     merchantProcess()
   }
 
