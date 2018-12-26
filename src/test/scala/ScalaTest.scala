@@ -2,11 +2,13 @@ import org.scalatest.FunSuite
 
 import scala.annotation.tailrec
 import java.io._
+
 import com.hyzs.spark.ml.ModelEvaluation._
 import com.hyzs.spark.utils.BaseUtil
 import com.hyzs.spark.utils.BaseUtil._
 import org.apache.spark.sql.Row
 
+import scala.concurrent.Future
 import scala.io.Source
 import scala.util.Random
 /**
@@ -260,7 +262,13 @@ class ScalaTest extends FunSuite{
     println(res)
   }
 
+  import concurrent.ExecutionContext.Implicits.global
   test("actor test"){
+    var i,j = 0
+    (0 to 10000).foreach(_ => Future{i = i +1})
+    (0 to 10000).foreach(_ => j = j+1)
+    Thread.sleep(1000)
+    println(s"i:$i, j:$j")
 
   }
 

@@ -205,17 +205,17 @@ object ModelPrediction {
     } else if (goal == "Regression"){
       val xgbParam = Map(
         "max_depth" -> 5,
-        "alpha" -> 0.03f,
+        "alpha" -> 0.05f,
         "subsample" -> 0.7,
         //"colsample_bytree" -> 0.7,
         //"min_child_weight" -> 0.5,
         "objective" -> "reg:linear",
         //"top_k" -> "13",
         "booster" -> "gbtree",
-        "eta" -> 0.03f,
+        "eta" -> 0.01f,
         "gamma" -> 0.5,
         "eval_metric" -> "rmse",
-        "num_round" -> 500)
+        "num_round" -> 400)
       val xgbReg = new XGBoostRegressor(xgbParam)
         .setFeaturesCol("features").setLabelCol("label")
 
