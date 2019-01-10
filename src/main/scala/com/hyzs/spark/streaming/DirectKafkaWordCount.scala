@@ -12,7 +12,7 @@ import org.apache.spark.streaming.kafka010._
 object DirectKafkaWordCount {
   def main(args: Array[String]) {
 
-    val Array(brokers, groupId, topics) = Array("111.230.17.36:9094","testGroup01","kylin_streaming_topic")
+    val Array(brokers, groupId, topics) = Array("111.230.17.36:9094","testGroup01","test01")
 
     // Create context with 2 second batch interval
     val sparkConf = new SparkConf()
